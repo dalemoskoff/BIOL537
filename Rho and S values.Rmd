@@ -1,0 +1,2019 @@
+---
+title: "Dale_Help"
+output: html_document
+---
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(mgcv)
+library(ggplot2)
+library(moments)
+library(readr)
+
+######
+#Robs code
+######
+setwd("/Users/dalemoskoff/Desktop")
+dat<-read.csv("LythrumDisplay2008.csv")
+
+Days<-names(dat)[grep("d[0-9]",names(dat))] # Vector of names
+
+Flwr<-dat %>% gather(all_of(Days),key="RelDay",value="OpFlwr") # Rearrange
+
+Flwr$RelDay<-as.numeric(gsub("d","",Flwr$RelDay)) # Remove 'd' from day
+
+Flwr$AbsDay<-Flwr$RelDay+Flwr$Start # Add absolute day
+Flwr$CumFlwr<-ave(Flwr$OpFlwr,Flwr$Num,FUN=cumsum) # Calculate cumulative N flowers
+
+
+
+####
+#Function
+####
+
+PredictDay<-function(Num,days=c(0:125)){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=Flwr[Flwr$Num==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+
+####
+#For loop trouble shooting 
+####
+
+Individual_ID<-unique(Flwr$Num) 
+Individual_ID #See here, there are missing numbers in the Num column, so we cant just use the length. This explains why the loop failed on the sixth iteration, because there is no Num = 6 in the data. Instead we need to use this individual_ID vector to subset for the Individual numbers that are actually in the data set.
+
+
+#The loop initially stopped at individual #187. so i am going to remove that ID from the Individual ID Vector. IT looks like you (really) dont have enough data for this one... it is all NA.
+Flwr[Flwr$Num==187,] 
+
+#Removing number 154 from the ID list 
+Individual_ID<-Individual_ID[Individual_ID!=187]
+
+#The same thing happened at Individual 440 so i will remove that individual as well. 
+Flwr[Flwr$Num==440,] #Both of these faulty IDs have all AbsDay values as NA, which explains why they arent working.
+
+#Removing number 440 from the ID list 
+Individual_ID<-Individual_ID[Individual_ID!=440]
+
+
+
+
+####
+#For loop that now works  
+####
+
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count=0
+for( j in 1:length(Individual_ID)){
+    count=count+1
+  Flowers<-append(Flowers,PredictDay(Num=Individual_ID[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual<-append(Individual,rep(Individual_ID[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-append(Days,0:125)
+}
+count #Now the loop worked and you have 386 individual growth rates in total (2 did not have enough data and were removed).
+
+####
+#Different Data Formats and Visualization 
+####
+
+
+#Putting growth rates into "long" format - this is good for plotting and other things depending on what you want.
+Mating.Matrix.Data_Long<-data.frame(Flowers,Individual,Days)
+
+#For example, here i am showing the growth rate for all IDs that are <5 (too many get cluttered).
+ggplot(Mating.Matrix.Data_Long[Mating.Matrix.Data_Long$Individual %in% c(1:10),])+
+  geom_line(aes(x=Days,y=Flowers,colour=as.factor(Individual)))+
+  theme_classic() + scale_color_brewer(palette="Set1") #google colour brewer 
+
+
+#To convert the data to wide format, the original code we tried now works (after converting the flower data)
+Mating.Matrix.Data_Wide<-Mating.Matrix.Data_Long %>% pivot_wider(names_from = Days,values_from = Flowers)
+Mating.Matrix.Data_Wide<-select(Mating.Matrix.Data_Wide,-(Individual))
+```
+```{r}
+##Convert data table to matrix
+flr.matrix<-as.matrix(Mating.Matrix.Data_Wide)
+
+#Initiate output files
+rowcount<-Mating.Matrix.Data_Wide[,1]
+N<-length(rowcount)
+index<-1:N
+output.table.rho2 <-table("NA", nrow=1, ncol=N)
+output.table.path2 <- table("NA",nrow=1, ncol=N)	
+output.table.pheno2 <- table("NA",nrow=1, ncol=N)
+
+#Mother/Father matrices
+mother.flr.matrix<- flr.matrix/sum(flr.matrix)
+father.colsum<- apply(flr.matrix, 2,  sum)
+father.flr.matrix<- apply(flr.matrix, 1, function(d) d/father.colsum) #don't understand this line
+mating.matrix <- mother.flr.matrix %*% father.flr.matrix #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix<- sum(mating.matrix) #should be 1
+
+#Trait matrix
+trait.matrix.raw<-as.matrix(Mating.Matrix.Data_Wide[,4:10]) #Why select these rows? Should we be looking for the trait matrix for each of our traits; e.g. variance, skew, kurtosis?
+trait.matrix<- scale(trait.matrix.raw)
+```
+
+```{r}
+#Trait matrix and finding Rho for each trait
+
+PredictDay<-function(Num,days=c(0:125)){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=Flwr[Flwr$Num==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+#Find moments
+Kurtosis<-c()
+Skewness<-c()
+Variance<-c()
+Start.date<-c()
+End.date<-c()
+Duration<-c()
+Mom<-for( j in 1:length(Individual_ID)){
+    count=count+1
+  Kurtosis<-append(Kurtosis,kurtosis(PredictDay(Num=Individual_ID[j])))
+  Skewness<-append(Skewness,skewness(PredictDay(Num=Individual_ID[j])))
+  Variance<-append(Variance,var(PredictDay(Num=Individual_ID[j])))
+}
+
+
+
+###Find start date starting with 1 
+Start.date<-as.numeric(names(Mating.Matrix.Data_Wide[-1])[apply(Mating.Matrix.Data_Wide[-1] != 0, 1, which.max)])
+
+###Find end date
+End.date<-as.numeric(names(Mating.Matrix.Data_Wide)[-1][max.col(Mating.Matrix.Data_Wide[-1] != 0, 'last')])
+
+
+###Find duration
+Duration<-End.date-Start.date
+
+##Find peak flowering
+Peak<-as.numeric(max.col(Mating.Matrix.Data_Wide,ties.method=c("first")))
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm<-as.vector(Kurtosis-mean(Kurtosis))/sd(Kurtosis)
+Skew.norm<-as.vector(Skewness-mean(Skewness))/sd(Skewness)
+Var.norm<-as.vector(Variance-mean(Variance))/sd(Variance)
+Start.date.norm<-as.vector(Start.date-mean(Start.date))/sd(Start.date)
+Duration.norm<-as.vector(Duration-mean(Duration))/sd(Duration)
+Peak.norm<-as.vector(Peak-mean(Peak))/sd(Peak)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k<-as.matrix(Kurt.norm) 
+trait.matrix.k<- scale(trait.matrix.raw.k)
+#Rho  -- Kurtosis
+rho.matrix.k <- t(trait.matrix.k) %*% mating.matrix %*% trait.matrix.k 
+rho.matrix.k
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s<-as.matrix(Skew.norm)
+trait.matrix.s<- scale(trait.matrix.raw.s)
+#Rho -- Skewness
+rho.matrix.s <- t(trait.matrix.s) %*% mating.matrix %*% trait.matrix.s
+rho.matrix.s
+
+
+#Trait matrix -- Variance
+trait.matrix.raw.v<-as.matrix(Var.norm) 
+trait.matrix.v<- scale(trait.matrix.raw.v)
+#Rho -- Variance
+rho.matrix.v <- t(trait.matrix.v) %*% mating.matrix %*% trait.matrix.v
+rho.matrix.v ##This value is greater than 1 -- there's something wrong. I found a source online that says it could be bc this character is less heritable than its genotypic correlation, so might be better to remove this particular character from the analysis.
+#Perhaps, just create a visual of variance and kurtosis correlating with latitude. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st<-as.matrix(Start.date.norm) 
+trait.matrix.st<- scale(trait.matrix.raw.st)
+#Rho -- Start date
+rho.matrix.st <- t(trait.matrix.st) %*% mating.matrix %*% trait.matrix.st
+rho.matrix.st
+
+#Trait matrix -- Duration
+trait.matrix.raw.d<-as.matrix(Duration.norm)
+trait.matrix.d<- scale(trait.matrix.raw.d)
+#Rho -- Duration
+rho.matrix.d <- t(trait.matrix.d) %*% mating.matrix %*% trait.matrix.d
+rho.matrix.d
+
+#Trait matrix -- Peak flowering
+trait.matrix.raw.peak<-as.matrix(Peak.norm)
+trait.matrix.peak<-scale(trait.matrix.raw.peak)
+#Rho -- Peak flowering
+rho.matrix.peak <- t(trait.matrix.peak) %*% mating.matrix %*% trait.matrix.peak
+rho.matrix.peak
+```
+
+```{r}
+###List of PC1 ####
+length(Individual_ID)
+PC1<-Flwr %>% group_by(Num) %>% select(Num,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE)) %>% drop_na(PC1) #Can't use PC1 to find rho b/c NA values make the two matrices non-compatible (different lengths). Took the mean b/c there are multiple inputs for each individual #, but they are all the same number.
+average.PC1<-mean(PC1$PC1)
+average.PC1 #Entire sample PC1 mean.
+
+##Average PC1 by population code.##
+PC1.by.population<-Flwr %>% group_by(Pop) %>% select(Pop,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE))
+PC1.by.population
+write.csv(PC1.by.population,"PC1 means by population.csv")
+
+```
+
+```{r}
+##Principal component analysis for S
+prcomp(mating.matrix,scale=FALSE)
+X<-eigen(mating.matrix,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for the entire dataset
+Y<-X$values
+S<-Y[1]/sum(Y)
+S
+```
+
+```{r}
+##ONEC Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONEC population
+ONEC<-subset(Flwr,Flwr$Pop=="ONEC")
+
+#PredictDay function for ONEC dataset
+PredictDayONEC<-function(Num,days=c(0:125)){
+  Mod2<-gam(OpFlwr~s(AbsDay),data=ONEC[ONEC$Num==Num,]) #Fitting Gam model.
+  PredDay2<-predict(Mod2,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay2[PredDay2<0]<-0 #Changing negative values to zero.
+return(PredDay2)
+}
+
+Individual_ID2<-unique(ONEC$Num) 
+
+#For-loop
+Days2<-c()
+Individual2<-c()
+Flowers2<-c()
+count2=0
+for( j in 1:length(Individual_ID2)){
+    count2=count2+1
+  Flowers2<-append(Flowers2,PredictDayONEC(Num=Individual_ID2[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual2<-append(Individual2,rep(Individual_ID2[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days2<-append(Days2,0:125)
+}
+
+Mating.Matrix.Data.ONEC_Long<-data.frame(Flowers2,Individual2,Days2)
+Mating.Matrix.Data.ONEC_Wide<-Mating.Matrix.Data.ONEC_Long %>% pivot_wider(names_from = Days2,values_from = Flowers2)
+Mating.Matrix.Data.ONEC_Wide<- dplyr :: select(Mating.Matrix.Data.ONEC_Wide,-(Individual2))
+
+
+##Mating matrix just ONEC population
+
+flr.matrix.ONEC<-as.matrix(Mating.Matrix.Data.ONEC_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONEC<- flr.matrix.ONEC/sum(flr.matrix.ONEC)
+father.colsum.ONEC<- apply(flr.matrix.ONEC, 2,  sum)
+father.flr.matrix.ONEC<- apply(flr.matrix.ONEC, 1, function(d) d/father.colsum.ONEC) #don't understand this line
+mating.matrix.ONEC <- mother.flr.matrix.ONEC %*% father.flr.matrix.ONEC #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONEC<- sum(mating.matrix.ONEC) #should be 1
+
+
+##Principal component analysis for S of ONEC population
+
+prcomp(mating.matrix.ONEC,scale=FALSE)
+X2<-eigen(mating.matrix.ONEC,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONEC Pop
+Y2<-X2$values
+S.ONEC<-Y2[1]/sum(Y2)
+S.ONEC
+
+
+
+###Trait matrix and finding Rho for each trait ONEC
+#Find moments
+Kurtosis.ONEC<-c()
+Skewness.ONEC<-c()
+Variance.ONEC<-c()
+Start.date.ONEC<-c()
+End.date.ONEC<-c()
+Duration.ONEC<-c()
+count2=0
+Mom.ONEC<-for( j in 1:length(Individual_ID2)){
+    count2=count2+1
+  Kurtosis.ONEC<-append(Kurtosis.ONEC,kurtosis(PredictDayONEC(Num=Individual_ID2[j])))
+  Skewness.ONEC<-append(Skewness.ONEC,skewness(PredictDayONEC(Num=Individual_ID2[j])))
+  Variance.ONEC<-append(Variance.ONEC,var(PredictDayONEC(Num=Individual_ID2[j])))
+}
+
+##Find mean variance
+mean(Variance.ONEC)
+
+###Find start date starting with 1 
+Start.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide[-1])[apply(Mating.Matrix.Data.ONEC_Wide[-1] != 0, 1, which.max)])
+
+###Find end date
+End.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide)[-1][max.col(Mating.Matrix.Data.ONEC_Wide[-1] != 0, 'last')])
+
+
+###Find duration
+Duration.ONEC<-End.date.ONEC-Start.date.ONEC
+
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONEC<-as.vector(Kurtosis.ONEC-mean(Kurtosis.ONEC))/sd(Kurtosis.ONEC)
+Skew.norm.ONEC<-as.vector(Skewness.ONEC-mean(Skewness.ONEC))/sd(Skewness.ONEC)
+Var.norm.ONEC<-as.vector(Variance.ONEC-mean(Variance.ONEC))/sd(Variance.ONEC)
+Start.date.norm.ONEC<-as.vector(Start.date.ONEC-mean(Start.date.ONEC))/sd(Start.date.ONEC)
+Duration.norm.ONEC<-as.vector(Duration.ONEC-mean(Duration.ONEC))/sd(Duration.ONEC)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONEC<-as.matrix(Kurt.norm.ONEC) 
+trait.matrix.k.ONEC<- scale(trait.matrix.raw.k.ONEC)
+#Rho  -- Kurtosis
+rho.matrix.k.ONEC <- t(trait.matrix.k.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.k.ONEC
+rho.matrix.k.ONEC
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONEC<-as.matrix(Skew.norm.ONEC)
+trait.matrix.s.ONEC<- scale(trait.matrix.raw.s.ONEC)
+#Rho -- Skewness
+rho.matrix.s.ONEC <- t(trait.matrix.s.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.s.ONEC
+rho.matrix.s.ONEC
+
+
+#Trait matrix -- Variance
+trait.matrix.raw.v.ONEC<-as.matrix(Var.norm.ONEC) 
+trait.matrix.v.ONEC<- scale(trait.matrix.raw.v.ONEC)
+#Rho -- Variance
+rho.matrix.v.ONEC <- t(trait.matrix.v.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.v.ONEC
+rho.matrix.v.ONEC ##This value is greater than 1 -- there's something wrong. I found a source online that says it could be bc this character is less heritable than its genotypic correlation, so might be better to remove this particular character from the analysis.
+#Perhaps, just create a visual of variance and kurtosis correlating with latitude. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONEC<-as.matrix(Start.date.norm.ONEC) 
+trait.matrix.st.ONEC<- scale(trait.matrix.raw.st.ONEC)
+#Rho -- Start date
+rho.matrix.st.ONEC <- t(trait.matrix.st.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.st.ONEC
+rho.matrix.st.ONEC
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONEC<-as.matrix(Duration.norm.ONEC)
+trait.matrix.d.ONEC<- scale(trait.matrix.raw.d.ONEC)
+#Rho -- Duration
+rho.matrix.d.ONEC <- t(trait.matrix.d.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.d.ONEC
+rho.matrix.d.ONEC
+
+```
+
+```{r}
+##MDDB Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just MDDB population
+MDDB<-subset(Flwr,Flwr$Pop=="MDDB")
+MDDB
+
+#PredictDay function for MDDB dataset
+PredictDayMDDB<-function(Num,days=c(0:125)){
+  Mod3<-gam(OpFlwr~s(AbsDay),data=MDDB[MDDB$Num==Num,]) #Fitting Gam model.
+  PredDay3<-predict(Mod3,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay3[PredDay3<0]<-0 #Changing negative values to zero.
+return(PredDay3)
+}
+
+Individual_ID3<-unique(MDDB$Num)
+
+#For-loop
+Days3<-c()
+Individual3<-c()
+Flowers3<-c()
+count3=0
+for( j in 1:length(Individual_ID3)){
+    count3=count3+1
+  Flowers3<-append(Flowers3,PredictDayMDDB(Num=Individual_ID3[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual3<-append(Individual3,rep(Individual_ID3[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days3<-append(Days3,0:125)
+}
+
+Mating.Matrix.Data.MDDB_Long<-data.frame(Flowers3,Individual3,Days3)
+Mating.Matrix.Data.MDDB_Wide<-Mating.Matrix.Data.MDDB_Long %>% pivot_wider(names_from = Days3,values_from = Flowers3)
+Mating.Matrix.Data.MDDB_Wide<- dplyr :: select(Mating.Matrix.Data.MDDB_Wide,-(Individual3))
+
+
+##Mating matrix just MDDB population
+
+flr.matrix.MDDB<-as.matrix(Mating.Matrix.Data.MDDB_Wide)
+#Mother/Father matrices
+mother.flr.matrix.MDDB<- flr.matrix.MDDB/sum(flr.matrix.MDDB)
+father.colsum.MDDB<- apply(flr.matrix.MDDB, 2,  sum)
+father.flr.matrix.MDDB<- apply(flr.matrix.MDDB, 1, function(d) d/father.colsum.MDDB) #don't understand this line
+mating.matrix.MDDB <- mother.flr.matrix.MDDB %*% father.flr.matrix.MDDB #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.MDDB<- sum(mating.matrix.MDDB) #should be 1
+
+
+##Principal component analysis for S of MDDB population
+
+prcomp(mating.matrix.MDDB,scale=FALSE)
+X3<-eigen(mating.matrix.MDDB,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for MDDB
+Y3<-X3$values
+S.MDDB<-Y3[1]/sum(Y3)
+S.MDDB
+
+
+
+###Trait matrix and finding Rho for each trait MDDB
+#Find moments
+Kurtosis.MDDB<-c()
+Skewness.MDDB<-c()
+Variance.MDDB<-c()
+Start.date.MDDB<-c()
+End.date.MDDB<-c()
+Duration.MDDB<-c()
+count3=0
+Mom.MDDB<-for( j in 1:length(Individual_ID3)){
+    count3=count3+1
+  Kurtosis.MDDB<-append(Kurtosis.MDDB,kurtosis(PredictDayMDDB(Num=Individual_ID3[j])))
+  Skewness.MDDB<-append(Skewness.MDDB,skewness(PredictDayMDDB(Num=Individual_ID3[j])))
+  Variance.MDDB<-append(Variance.MDDB,var(PredictDayMDDB(Num=Individual_ID3[j])))
+}
+
+###Find average variance 
+mean(Variance.MDDB)
+
+###Find start date starting with 1 
+Start.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide[-1])[apply(Mating.Matrix.Data.MDDB_Wide[-1] != 0, 1, which.max)])
+
+###Find end date
+End.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide)[-1][max.col(Mating.Matrix.Data.MDDB_Wide[-1] != 0, 'last')])
+
+
+###Find duration
+Duration.MDDB<-End.date.MDDB-Start.date.MDDB
+
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.MDDB<-as.vector(Kurtosis.MDDB-mean(Kurtosis.MDDB))/sd(Kurtosis.MDDB)
+Skew.norm.MDDB<-as.vector(Skewness.MDDB-mean(Skewness.MDDB))/sd(Skewness.MDDB)
+Var.norm.MDDB<-as.vector(Variance.MDDB-mean(Variance.MDDB))/sd(Variance.MDDB)
+Start.date.norm.MDDB<-as.vector(Start.date.MDDB-mean(Start.date.MDDB))/sd(Start.date.MDDB)
+Duration.norm.MDDB<-as.vector(Duration.MDDB-mean(Duration.MDDB))/sd(Duration.MDDB)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.MDDB<-as.matrix(Kurt.norm.MDDB) 
+trait.matrix.k.MDDB<- scale(trait.matrix.raw.k.MDDB)
+#Rho  -- Kurtosis
+rho.matrix.k.MDDB <- t(trait.matrix.k.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.k.MDDB
+rho.matrix.k.MDDB
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.MDDB<-as.matrix(Skew.norm.MDDB)
+trait.matrix.s.MDDB<- scale(trait.matrix.raw.s.MDDB)
+#Rho -- Skewness
+rho.matrix.s.MDDB <- t(trait.matrix.s.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.s.MDDB
+rho.matrix.s.MDDB
+
+## STOPPED CALCULATING VARIANCE AFTER THIS BC DECIDED NOT TO USE IN RESULTS. VALUE IS AGAIN GREATER THAN 1.
+trait.matrix.raw.v.MDDB<-as.matrix(Var.norm.MDDB) 
+trait.matrix.v.MDDB<- scale(trait.matrix.raw.v.MDDB)
+#Rho -- Variance
+rho.matrix.v.MDDB <- t(trait.matrix.v.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.v.MDDB
+rho.matrix.v.MDDB
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.MDDB<-as.matrix(Start.date.norm.MDDB) 
+trait.matrix.st.MDDB<- scale(trait.matrix.raw.st.MDDB)
+#Rho -- Start date
+rho.matrix.st.MDDB <- t(trait.matrix.st.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.st.MDDB
+rho.matrix.st.MDDB
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.MDDB<-as.matrix(Duration.norm.MDDB)
+trait.matrix.d.MDDB<- scale(trait.matrix.raw.d.MDDB)
+#Rho -- Duration
+rho.matrix.d.MDDB <- t(trait.matrix.d.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.d.MDDB
+rho.matrix.d.MDDB
+
+```
+
+```{r}
+##ONRO Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONRO population
+ONRO<-subset(Flwr,Flwr$Pop=="ONRO")
+ONRO
+
+#PredictDay function for ONRO dataset
+PredictDayONRO<-function(Num,days=c(0:125)){
+  Mod4<-gam(OpFlwr~s(AbsDay),data=ONRO[ONRO$Num==Num,]) #Fitting Gam model.
+  PredDay4<-predict(Mod4,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay4[PredDay4<0]<-0 #Changing negative values to zero.
+return(PredDay4)
+}
+
+Individual_ID4<-unique(ONRO$Num) 
+
+#For-loop
+Days4<-c()
+Individual4<-c()
+Flowers4<-c()
+count4=0
+for( j in 1:length(Individual_ID4)){
+    count4=count4+1
+  Flowers4<-append(Flowers4,PredictDayONRO(Num=Individual_ID4[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual4<-append(Individual4,rep(Individual_ID4[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days4<-append(Days4,0:125)
+}
+
+Mating.Matrix.Data.ONRO_Long<-data.frame(Flowers4,Individual4,Days4)
+Mating.Matrix.Data.ONRO_Wide<-Mating.Matrix.Data.ONRO_Long %>% pivot_wider(names_from = Days4,values_from = Flowers4)
+Mating.Matrix.Data.ONRO_Wide<- dplyr :: select(Mating.Matrix.Data.ONRO_Wide,-(Individual4))
+
+##Mating matrix just ONRO population
+
+flr.matrix.ONRO<-as.matrix(Mating.Matrix.Data.ONRO_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONRO<- flr.matrix.ONRO/sum(flr.matrix.ONRO)
+father.colsum.ONRO<- apply(flr.matrix.ONRO, 2,  sum)
+father.flr.matrix.ONRO<- apply(flr.matrix.ONRO, 1, function(d) d/father.colsum.ONRO) #don't understand this line
+mating.matrix.ONRO <- mother.flr.matrix.ONRO %*% father.flr.matrix.ONRO #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONRO<- sum(mating.matrix.ONRO) #should be 1
+
+
+##Principal component analysis for S of ONRO population
+
+prcomp(mating.matrix.ONRO,scale=FALSE)
+X4<-eigen(mating.matrix.ONRO,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONRO
+Y4<-X4$values
+S.ONRO<-Y4[1]/sum(Y4)
+S.ONRO
+
+
+
+###Trait matrix and finding Rho for each trait ONRO
+#Find moments
+Kurtosis.ONRO<-c()
+Skewness.ONRO<-c()
+Variance.ONRO<-c()
+Start.date.ONRO<-c()
+End.date.ONRO<-c()
+Duration.ONRO<-c()
+count4=0
+Mom.ONRO<-for( j in 1:length(Individual_ID4)){
+    count4=count4+1
+  Kurtosis.ONRO<-append(Kurtosis.ONRO,kurtosis(PredictDayONRO(Num=Individual_ID4[j])))
+  Skewness.ONRO<-append(Skewness.ONRO,skewness(PredictDayONRO(Num=Individual_ID4[j])))
+  Variance.ONRO<-append(Variance.ONRO,var(PredictDayONRO(Num=Individual_ID4[j])))
+}
+
+##Find average variance.
+mean(Variance.ONRO)
+
+
+###Find start date starting with 1 
+Start.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide[-1])[apply(Mating.Matrix.Data.ONRO_Wide[-1] != 0, 1, which.max)])
+Start.date.ONRO
+
+###Find end date
+End.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[-1][max.col(Mating.Matrix.Data.ONRO_Wide[-1] != 0, 'last')])
+End.date.ONRO
+
+###Find duration
+Duration.ONRO<-End.date.ONRO-Start.date.ONRO
+
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONRO<-as.vector(Kurtosis.ONRO-mean(Kurtosis.ONRO))/sd(Kurtosis.ONRO)
+Skew.norm.ONRO<-as.vector(Skewness.ONRO-mean(Skewness.ONRO))/sd(Skewness.ONRO)
+Var.norm.ONRO<-as.vector(Variance.ONRO-mean(Variance.ONRO))/sd(Variance.ONRO)
+Start.date.norm.ONRO<-as.vector(Start.date.ONRO-mean(Start.date.ONRO))/sd(Start.date.ONRO)
+Duration.norm.ONRO<-as.vector(Duration.ONRO-mean(Duration.ONRO))/sd(Duration.ONRO)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONRO<-as.matrix(Kurt.norm.ONRO) 
+trait.matrix.k.ONRO<- scale(trait.matrix.raw.k.ONRO)
+#Rho  -- Kurtosis
+rho.matrix.k.ONRO <- t(trait.matrix.k.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.k.ONRO
+rho.matrix.k.ONRO
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONRO<-as.matrix(Skew.norm.ONRO)
+trait.matrix.s.ONRO<- scale(trait.matrix.raw.s.ONRO)
+#Rho -- Skewness
+rho.matrix.s.ONRO <- t(trait.matrix.s.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.s.ONRO
+rho.matrix.s.ONRO
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONRO<-as.matrix(Start.date.norm.ONRO) 
+trait.matrix.st.ONRO<- scale(trait.matrix.raw.st.ONRO)
+#Rho -- Start date
+rho.matrix.st.ONRO <- t(trait.matrix.st.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.st.ONRO
+rho.matrix.st.ONRO
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONRO<-as.matrix(Duration.norm.ONRO)
+trait.matrix.d.ONRO<- scale(trait.matrix.raw.d.ONRO)
+#Rho -- Duration
+rho.matrix.d.ONRO <- t(trait.matrix.d.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.d.ONRO
+rho.matrix.d.ONRO
+
+```
+
+```{r}
+##NYSC Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just NYSC population
+NYSC<-subset(Flwr,Flwr$Pop=="NYSC")
+NYSC
+
+#PredictDay function for NYSC dataset
+PredictDayNYSC<-function(Num,days=c(0:125)){
+  Mod5<-gam(OpFlwr~s(AbsDay),data=NYSC[NYSC$Num==Num,]) #Fitting Gam model.
+  PredDay5<-predict(Mod5,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay5[PredDay5<0]<-0 #Changing negative values to zero.
+return(PredDay5)
+}
+
+Individual_ID5<-unique(NYSC$Num) 
+
+#For-loop
+Days5<-c()
+Individual5<-c()
+Flowers5<-c()
+count5=0
+for( j in 1:length(Individual_ID5)){
+    count5=count5+1
+  Flowers5<-append(Flowers5,PredictDayNYSC(Num=Individual_ID5[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual5<-append(Individual5,rep(Individual_ID5[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days5<-append(Days5,0:125)
+}
+
+Mating.Matrix.Data.NYSC_Long<-data.frame(Flowers5,Individual5,Days5)
+Mating.Matrix.Data.NYSC_Wide<-Mating.Matrix.Data.NYSC_Long %>% pivot_wider(names_from = Days5,values_from = Flowers5)
+Mating.Matrix.Data.NYSC_Wide<- dplyr:: select(Mating.Matrix.Data.NYSC_Wide,-(Individual5))
+
+##Mating matrix just ONEC population
+
+flr.matrix.NYSC<-as.matrix(Mating.Matrix.Data.NYSC_Wide)
+#Mother/Father matrices
+mother.flr.matrix.NYSC<- flr.matrix.NYSC/sum(flr.matrix.NYSC)
+father.colsum.NYSC<- apply(flr.matrix.NYSC, 2,  sum)
+father.flr.matrix.NYSC<- apply(flr.matrix.NYSC, 1, function(d) d/father.colsum.NYSC) #don't understand this line
+mating.matrix.NYSC <- mother.flr.matrix.NYSC %*% father.flr.matrix.NYSC #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.NYSC<- sum(mating.matrix.NYSC) #should be 1
+sum.mating.matrix.NYSC
+
+
+
+##Principal component analysis for S of ONEC population
+
+prcomp(mating.matrix.NYSC,scale=FALSE)
+X5<-eigen(mating.matrix.NYSC,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONEC
+Y5<-X5$values
+S.NYSC<-Y5[1]/sum(Y5)
+S.NYSC
+
+
+
+###Trait matrix and finding Rho for each trait ONEC
+#Find moments
+Kurtosis.NYSC<-c()
+Skewness.NYSC<-c()
+Variance.NYSC<-c()
+Start.date.NYSC<-c()
+End.date.NYSC<-c()
+Duration.NYSC<-c()
+count5=0
+Mom.NYSC<-for( j in 1:length(Individual_ID5)){
+    count5=count5+1
+  Kurtosis.NYSC<-append(Kurtosis.NYSC,kurtosis(PredictDayNYSC(Num=Individual_ID5[j])))
+  Skewness.NYSC<-append(Skewness.NYSC,skewness(PredictDayNYSC(Num=Individual_ID5[j])))
+  Variance.NYSC<-append(Variance.NYSC,var(PredictDayNYSC(Num=Individual_ID5[j])))
+}
+#Probability function -- should be the number of flowers on each day divided by the total 
+
+##Find average variance.
+mean(Variance.NYSC)
+
+###Find start date starting with 1 
+Start.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide[-1])[apply(Mating.Matrix.Data.NYSC_Wide[-1] != 0, 1, which.max)]) ##Take out -1
+Start.date.NYSC
+
+###Find end date
+End.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide)[-1][max.col(Mating.Matrix.Data.NYSC_Wide[-1] != 0, 'last')])
+End.date.NYSC
+
+###Find duration
+Duration.NYSC<-End.date.NYSC-Start.date.NYSC
+
+###Vector of PC1 ####
+
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.NYSC<-as.vector(Kurtosis.NYSC-mean(Kurtosis.NYSC))/sd(Kurtosis.NYSC)
+Skew.norm.NYSC<-as.vector(Skewness.NYSC-mean(Skewness.NYSC))/sd(Skewness.NYSC)
+Var.norm.NYSC<-as.vector(Variance.NYSC-mean(Variance.NYSC))/sd(Variance.NYSC)
+Start.date.norm.NYSC<-as.vector(Start.date.NYSC-mean(Start.date.NYSC))/sd(Start.date.NYSC)
+Duration.norm.NYSC<-as.vector(Duration.NYSC-mean(Duration.NYSC))/sd(Duration.NYSC) #Already scaled traits.
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.NYSC<-as.matrix(Kurt.norm.NYSC) 
+trait.matrix.k.NYSC<- scale(trait.matrix.raw.k.NYSC)
+#Rho  -- Kurtosis
+rho.matrix.k.NYSC <- t(trait.matrix.k.NYSC) %*% mating.matrix.NYSC %*% trait.matrix.k.NYSC
+rho.matrix.k.NYSC
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.NYSC<-as.matrix(Skew.norm.NYSC)
+trait.matrix.s.NYSC<- scale(trait.matrix.raw.s.NYSC)
+#Rho -- Skewness
+rho.matrix.s.NYSC <- t(trait.matrix.s.NYSC) %*% mating.matrix.NYSC %*% trait.matrix.s.NYSC
+rho.matrix.s.NYSC
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.NYSC<-as.matrix(Start.date.norm.NYSC) 
+trait.matrix.st.NYSC<- scale(trait.matrix.raw.st.NYSC)
+#Rho -- Start date
+rho.matrix.st.NYSC <- t(trait.matrix.st.NYSC) %*% mating.matrix.NYSC %*% trait.matrix.st.NYSC
+rho.matrix.st.NYSC
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.NYSC<-as.matrix(Duration.norm.NYSC)
+trait.matrix.d.NYSC<- scale(trait.matrix.raw.d.NYSC)
+#Rho -- Duration
+rho.matrix.d.NYSC <- t(trait.matrix.d.NYSC) %*% mating.matrix.NYSC %*% trait.matrix.d.NYSC
+rho.matrix.d.NYSC
+
+```
+```{r}
+##NYLV Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just NYLV population
+NYLV<-subset(Flwr,Flwr$Pop=="NYLV")
+NYLV
+
+#PredictDay function for NYLV dataset
+PredictDayNYLV<-function(Num,days=c(0:125)){
+  Mod6<-gam(OpFlwr~s(AbsDay),data=NYLV[NYLV$Num==Num,]) #Fitting Gam model.
+  PredDay6<-predict(Mod6,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay6[PredDay6<0]<-0 #Changing negative values to zero.
+return(PredDay6)
+}
+
+Individual_ID6<-unique(NYLV$Num) 
+Individual_ID6<-Individual_ID6[Individual_ID6!=440]
+
+#For-loop
+Days6<-c()
+Individual6<-c()
+Flowers6<-c()
+count6=0
+for( j in 1:length(Individual_ID6)){
+    count6=count6+1
+  Flowers6<-append(Flowers6,PredictDayNYLV(Num=Individual_ID6[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual6<-append(Individual6,rep(Individual_ID6[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days6<-append(Days6,0:125)
+}
+
+Mating.Matrix.Data.NYLV_Long<-data.frame(Flowers6,Individual6,Days6)
+Mating.Matrix.Data.NYLV_Wide<-Mating.Matrix.Data.NYLV_Long %>% pivot_wider(names_from = Days6,values_from = Flowers6)
+Mating.Matrix.Data.NYLV_Wide<-dplyr:: select(Mating.Matrix.Data.NYLV_Wide,-(Individual6))
+
+##Mating matrix just NYLV population
+
+flr.matrix.NYLV<-as.matrix(Mating.Matrix.Data.NYLV_Wide)
+#Mother/Father matrices
+mother.flr.matrix.NYLV<- flr.matrix.NYLV/sum(flr.matrix.NYLV)
+father.colsum.NYLV<- apply(flr.matrix.NYLV, 2,  sum)
+father.flr.matrix.NYLV<- apply(flr.matrix.NYLV, 1, function(d) d/father.colsum.NYLV) #don't understand this line
+mating.matrix.NYLV <- mother.flr.matrix.NYLV %*% father.flr.matrix.NYLV #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.NYLV<- sum(mating.matrix.NYLV) #should be 1
+
+##Principal component analysis for S of NYLV population
+
+prcomp(mating.matrix.NYLV,scale=FALSE)
+X6<-eigen(mating.matrix.NYLV,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for NYLV
+Y6<-X6$values
+S.NYLV<-Y6[1]/sum(Y6)
+S.NYLV
+
+
+
+###Trait matrix and finding Rho for each trait NYLV
+#Find moments
+Kurtosis.NYLV<-c()
+Skewness.NYLV<-c()
+Variance.NYLV<-c()
+Start.date.NYLV<-c()
+End.date.NYLV<-c()
+Duration.NYLV<-c()
+count6=0
+Mom.NYLV<-for( j in 1:length(Individual_ID6)){
+    count6=count6+1
+  Kurtosis.NYLV<-append(Kurtosis.NYLV,kurtosis(PredictDayNYLV(Num=Individual_ID6[j])))
+  Skewness.NYLV<-append(Skewness.NYLV,skewness(PredictDayNYLV(Num=Individual_ID6[j])))
+  Variance.NYLV<-append(Variance.NYLV,var(PredictDayNYLV(Num=Individual_ID6[j])))
+}
+
+##Find average variance.
+mean(Variance.NYLV)
+
+###Find start date starting with 1 
+Start.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide[-1])[apply(Mating.Matrix.Data.NYLV_Wide[-1] != 0, 1, which.max)])
+Start.date.NYLV
+
+###Find end date
+End.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide)[-1][max.col(Mating.Matrix.Data.NYLV_Wide[-1] != 0, 'last')])
+End.date.NYLV
+
+###Find duration
+Duration.NYLV<-End.date.NYLV-Start.date.NYLV
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.NYLV<-as.vector(Kurtosis.NYLV-mean(Kurtosis.NYLV))/sd(Kurtosis.NYLV)
+Skew.norm.NYLV<-as.vector(Skewness.NYLV-mean(Skewness.NYLV))/sd(Skewness.NYLV)
+Var.norm.NYLV<-as.vector(Variance.NYLV-mean(Variance.NYLV))/sd(Variance.NYLV)
+Start.date.norm.NYLV<-as.vector(Start.date.NYLV-mean(Start.date.NYLV))/sd(Start.date.NYLV)
+Duration.norm.NYLV<-as.vector(Duration.NYLV-mean(Duration.NYLV))/sd(Duration.NYLV)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.NYLV<-as.matrix(Kurt.norm.NYLV) 
+trait.matrix.k.NYLV<- scale(trait.matrix.raw.k.NYLV)
+#Rho  -- Kurtosis
+rho.matrix.k.NYLV <- t(trait.matrix.k.NYLV) %*% mating.matrix.NYLV %*% trait.matrix.k.NYLV
+rho.matrix.k.NYLV
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.NYLV<-as.matrix(Skew.norm.NYLV)
+trait.matrix.s.NYLV<- scale(trait.matrix.raw.s.NYLV)
+#Rho -- Skewness
+rho.matrix.s.NYLV <- t(trait.matrix.s.NYLV) %*% mating.matrix.NYLV %*% trait.matrix.s.NYLV
+rho.matrix.s.NYLV
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.NYLV<-as.matrix(Start.date.norm.NYLV) 
+trait.matrix.st.NYLV<- scale(trait.matrix.raw.st.NYLV)
+#Rho -- Start date
+rho.matrix.st.NYLV <- t(trait.matrix.st.NYLV) %*% mating.matrix.NYLV %*% trait.matrix.st.NYLV
+rho.matrix.st.NYLV
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.NYLV<-as.matrix(Duration.norm.NYLV)
+trait.matrix.d.NYLV<- scale(trait.matrix.raw.d.NYLV)
+#Rho -- Duration
+rho.matrix.d.NYLV <- t(trait.matrix.d.NYLV) %*% mating.matrix.NYLV %*% trait.matrix.d.NYLV
+rho.matrix.d.NYLV
+
+```
+
+```{r}
+##ONDM Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONDM population
+ONDM<-subset(Flwr,Flwr$Pop=="ONDM")
+ONDM
+
+#PredictDay function for ONDM dataset
+PredictDayONDM<-function(Num,days=c(0:125)){
+  Mod7<-gam(OpFlwr~s(AbsDay),data=ONDM[ONDM$Num==Num,]) #Fitting Gam model.
+  PredDay7<-predict(Mod7,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay7[PredDay7<0]<-0 #Changing negative values to zero.
+return(PredDay7)
+}
+
+Individual_ID7<-unique(ONDM$Num) 
+
+#For-loop
+Days7<-c()
+Individual7<-c()
+Flowers7<-c()
+count7=0
+for( j in 1:length(Individual_ID7)){
+    count7=count7+1
+  Flowers7<-append(Flowers7,PredictDayONDM(Num=Individual_ID7[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual7<-append(Individual7,rep(Individual_ID7[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days7<-append(Days7,0:125)
+}
+
+Mating.Matrix.Data.ONDM_Long<-data.frame(Flowers7,Individual7,Days7)
+Mating.Matrix.Data.ONDM_Wide<-Mating.Matrix.Data.ONDM_Long %>% pivot_wider(names_from = Days7,values_from = Flowers7)
+Mating.Matrix.Data.ONDM_Wide<-dplyr :: select(Mating.Matrix.Data.ONDM_Wide,-(Individual7))
+
+##Mating matrix just ONDM population
+
+flr.matrix.ONDM<-as.matrix(Mating.Matrix.Data.ONDM_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONDM<- flr.matrix.ONDM/sum(flr.matrix.ONDM)
+father.colsum.ONDM<- apply(flr.matrix.ONDM, 2,  sum)
+father.flr.matrix.ONDM<- apply(flr.matrix.ONDM, 1, function(d) d/father.colsum.ONDM) #don't understand this line
+mating.matrix.ONDM <- mother.flr.matrix.ONDM %*% father.flr.matrix.ONDM #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONDM<- sum(mating.matrix.ONDM) #should be 1
+
+
+##Principal component analysis for S of ONDM population
+
+prcomp(mating.matrix.ONDM,scale=FALSE)
+X7<-eigen(mating.matrix.ONDM,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONDM
+Y7<-X7$values
+S.ONDM<-Y7[1]/sum(Y7)
+S.ONDM
+
+
+###Trait matrix and finding Rho for each trait ONDM
+#Find moments
+Kurtosis.ONDM<-c()
+Skewness.ONDM<-c()
+Variance.ONDM<-c()
+Start.date.ONDM<-c()
+End.date.ONDM<-c()
+Duration.ONDM<-c()
+count7=0
+Mom.ONDM<-for( j in 1:length(Individual_ID7)){
+    count7=count7+1
+  Kurtosis.ONDM<-append(Kurtosis.ONDM,kurtosis(PredictDayONDM(Num=Individual_ID7[j])))
+  Skewness.ONDM<-append(Skewness.ONDM,skewness(PredictDayONDM(Num=Individual_ID7[j])))
+  Variance.ONDM<-append(Variance.ONDM,var(PredictDayONDM(Num=Individual_ID7[j])))
+}
+
+##Find average variance.
+mean(Variance.ONDM)
+
+###Find start date starting with 1 
+Start.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide[-1])[apply(Mating.Matrix.Data.ONDM_Wide[-1] != 0, 1, which.max)])
+Start.date.ONDM
+
+###Find end date
+End.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide)[-1][max.col(Mating.Matrix.Data.ONDM_Wide[-1] != 0, 'last')])
+End.date.ONDM
+
+###Find duration
+Duration.ONDM<-End.date.ONDM-Start.date.ONDM
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONDM<-as.vector(Kurtosis.ONDM-mean(Kurtosis.ONDM))/sd(Kurtosis.ONDM)
+Skew.norm.ONDM<-as.vector(Skewness.ONDM-mean(Skewness.ONDM))/sd(Skewness.ONDM)
+Var.norm.ONDM<-as.vector(Variance.ONDM-mean(Variance.ONDM))/sd(Variance.ONDM)
+Start.date.norm.ONDM<-as.vector(Start.date.ONDM-mean(Start.date.ONDM))/sd(Start.date.ONDM)
+Duration.norm.ONDM<-as.vector(Duration.ONDM-mean(Duration.ONDM))/sd(Duration.ONDM)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONDM<-as.matrix(Kurt.norm.ONDM) 
+trait.matrix.k.ONDM<- scale(trait.matrix.raw.k.ONDM)
+#Rho  -- Kurtosis
+rho.matrix.k.ONDM <- t(trait.matrix.k.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.k.ONDM
+rho.matrix.k.ONDM
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONDM<-as.matrix(Skew.norm.ONDM)
+trait.matrix.s.ONDM<- scale(trait.matrix.raw.s.ONDM)
+#Rho -- Skewness
+rho.matrix.s.ONDM<- t(trait.matrix.s.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.s.ONDM
+rho.matrix.s.ONDM
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONDM<-as.matrix(Start.date.norm.ONDM) 
+trait.matrix.st.ONDM<- scale(trait.matrix.raw.st.ONDM)
+#Rho -- Start date
+rho.matrix.st.ONDM <- t(trait.matrix.st.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.st.ONDM
+rho.matrix.st.ONDM
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONDM<-as.matrix(Duration.norm.ONDM)
+trait.matrix.d.ONDM<- scale(trait.matrix.raw.d.ONDM)
+#Rho -- Duration
+rho.matrix.d.ONDM <- t(trait.matrix.d.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.d.ONDM
+rho.matrix.d.ONDM
+
+```
+
+```{r}
+##ONTI Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONTI population
+ONTI<-subset(Flwr,Flwr$Pop=="ONTI")
+ONTI
+
+#PredictDay function for ONTI dataset
+PredictDayONTI<-function(Num,days=c(0:125)){
+  Mod8<-gam(OpFlwr~s(AbsDay),data=ONTI[ONTI$Num==Num,]) #Fitting Gam model.
+  PredDay8<-predict(Mod8,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay8[PredDay8<0]<-0 #Changing negative values to zero.
+return(PredDay8)
+}
+
+Individual_ID8<-unique(ONTI$Num) 
+Individual_ID8<-Individual_ID8[Individual_ID8!=187]
+Individual_ID8<-Individual_ID8[Individual_ID8!=440]
+
+#For-loop
+Days8<-c()
+Individual8<-c()
+Flowers8<-c()
+count8=0
+for( j in 1:length(Individual_ID8)){
+    count8=count8+1
+  Flowers8<-append(Flowers8,PredictDayONTI(Num=Individual_ID8[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual8<-append(Individual8,rep(Individual_ID8[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days8<-append(Days8,0:125)
+}
+
+Mating.Matrix.Data.ONTI_Long<-data.frame(Flowers8,Individual8,Days8)
+Mating.Matrix.Data.ONTI_Wide<-Mating.Matrix.Data.ONTI_Long %>% pivot_wider(names_from = Days8,values_from = Flowers8)
+Mating.Matrix.Data.ONTI_Wide<-dplyr :: select(Mating.Matrix.Data.ONTI_Wide,-(Individual8))
+
+##Mating matrix just ONTI population
+
+flr.matrix.ONTI<-as.matrix(Mating.Matrix.Data.ONTI_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONTI<- flr.matrix.ONTI/sum(flr.matrix.ONTI)
+father.colsum.ONTI<- apply(flr.matrix.ONTI, 2,  sum)
+father.flr.matrix.ONTI<- apply(flr.matrix.ONTI, 1, function(d) d/father.colsum.ONTI) #don't understand this line
+mating.matrix.ONTI <- mother.flr.matrix.ONTI %*% father.flr.matrix.ONTI #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONTI<- sum(mating.matrix.ONTI) #should be 1
+
+##Principal component analysis for S of ONTI population
+
+prcomp(mating.matrix.ONTI,scale=FALSE)
+X8<-eigen(mating.matrix.ONTI,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONTI
+Y8<-X8$values
+S.ONTI<-Y8[1]/sum(Y8)
+S.ONTI
+
+
+
+###Trait matrix and finding Rho for each trait ONTI
+#Find moments
+Kurtosis.ONTI<-c()
+Skewness.ONTI<-c()
+Variance.ONTI<-c()
+Start.date.ONTI<-c()
+End.date.ONTI<-c()
+Duration.ONTI<-c()
+count8=0
+Mom.ONTI<-for( j in 1:length(Individual_ID8)){
+    count8=count8+1
+  Kurtosis.ONTI<-append(Kurtosis.ONTI,kurtosis(PredictDayONTI(Num=Individual_ID8[j])))
+  Skewness.ONTI<-append(Skewness.ONTI,skewness(PredictDayONTI(Num=Individual_ID8[j])))
+  Variance.ONTI<-append(Variance.ONTI,var(PredictDayONTI(Num=Individual_ID8[j])))
+}
+
+##Find average variance.
+mean(Variance.ONTI)
+
+###Find start date starting with 1 
+Start.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide[-1])[apply(Mating.Matrix.Data.ONTI_Wide[-1] != 0, 1, which.max)])
+Start.date.ONTI
+
+###Find end date
+End.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide)[-1][max.col(Mating.Matrix.Data.ONTI_Wide[-1] != 0, 'last')])
+End.date.ONTI
+
+###Find duration
+Duration.ONTI<-End.date.ONTI-Start.date.ONTI
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONTI<-as.vector(Kurtosis.ONTI-mean(Kurtosis.ONTI))/sd(Kurtosis.ONTI)
+Skew.norm.ONTI<-as.vector(Skewness.ONTI-mean(Skewness.ONTI))/sd(Skewness.ONTI)
+Var.norm.ONTI<-as.vector(Variance.ONTI-mean(Variance.ONTI))/sd(Variance.ONTI)
+Start.date.norm.ONTI<-as.vector(Start.date.ONTI-mean(Start.date.ONTI))/sd(Start.date.ONTI)
+Duration.norm.ONTI<-as.vector(Duration.ONTI-mean(Duration.ONTI))/sd(Duration.ONTI)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONTI<-as.matrix(Kurt.norm.ONTI) 
+trait.matrix.k.ONTI<- scale(trait.matrix.raw.k.ONTI)
+#Rho  -- Kurtosis
+rho.matrix.k.ONTI <- t(trait.matrix.k.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.k.ONTI
+rho.matrix.k.ONTI
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONTI<-as.matrix(Skew.norm.ONTI)
+trait.matrix.s.ONTI<- scale(trait.matrix.raw.s.ONTI)
+#Rho -- Skewness
+rho.matrix.s.ONTI <- t(trait.matrix.s.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.s.ONTI
+rho.matrix.s.ONTI
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONTI<-as.matrix(Start.date.norm.ONTI) 
+trait.matrix.st.ONTI<- scale(trait.matrix.raw.st.ONTI)
+#Rho -- Start date
+rho.matrix.st.ONTI <- t(trait.matrix.st.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.st.ONTI
+rho.matrix.st.ONTI
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONTI<-as.matrix(Duration.norm.ONTI)
+trait.matrix.d.ONTI<- scale(trait.matrix.raw.d.ONTI)
+#Rho -- Duration
+rho.matrix.d.ONTI <- t(trait.matrix.d.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.d.ONTI
+rho.matrix.d.ONTI
+
+```
+```{r}
+##ONWH Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONWH population
+ONWH<-subset(Flwr,Flwr$Pop=="ONWH")
+ONWH
+
+#PredictDay function for ONWH dataset
+PredictDayONWH<-function(Num,days=c(0:125)){
+  Mod9<-gam(OpFlwr~s(AbsDay),data=ONWH[ONWH$Num==Num,]) #Fitting Gam model.
+  PredDay9<-predict(Mod9,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay9[PredDay9<0]<-0 #Changing negative values to zero.
+return(PredDay9)
+}
+
+Individual_ID9<-unique(ONWH$Num) 
+
+#For-loop
+Days9<-c()
+Individual9<-c()
+Flowers9<-c()
+count9=0
+for( j in 1:length(Individual_ID9)){
+    count9=count9+1
+  Flowers9<-append(Flowers9,PredictDayONWH(Num=Individual_ID9[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual9<-append(Individual9,rep(Individual_ID9[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days9<-append(Days9,0:125)
+}
+
+Mating.Matrix.Data.ONWH_Long<-data.frame(Flowers9,Individual9,Days9)
+Mating.Matrix.Data.ONWH_Wide<-Mating.Matrix.Data.ONWH_Long %>% pivot_wider(names_from = Days9,values_from = Flowers9)
+Mating.Matrix.Data.ONWH_Wide<-dplyr :: select(Mating.Matrix.Data.ONWH_Wide,-(Individual9))
+
+##Mating matrix just ONWH population
+
+flr.matrix.ONWH<-as.matrix(Mating.Matrix.Data.ONWH_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONWH<- flr.matrix.ONWH/sum(flr.matrix.ONWH)
+father.colsum.ONWH<- apply(flr.matrix.ONWH, 2,  sum)
+father.flr.matrix.ONWH<- apply(flr.matrix.ONWH, 1, function(d) d/father.colsum.ONWH) #don't understand this line
+mating.matrix.ONWH <- mother.flr.matrix.ONWH %*% father.flr.matrix.ONWH #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONWH<- sum(mating.matrix.ONWH) #should be 1
+
+
+##Principal component analysis for S of ONWH population
+
+prcomp(mating.matrix.ONWH,scale=FALSE)
+X9<-eigen(mating.matrix.ONWH,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONWH
+Y9<-X9$values
+S.ONWH<-Y9[1]/sum(Y9)
+S.ONWH
+
+
+
+###Trait matrix and finding Rho for each trait ONWH
+#Find moments
+Kurtosis.ONWH<-c()
+Skewness.ONWH<-c()
+Variance.ONWH<-c()
+Start.date.ONWH<-c()
+End.date.ONWH<-c()
+Duration.ONWH<-c()
+count9=0
+Mom.ONWH<-for( j in 1:length(Individual_ID9)){
+    count9=count9+1
+  Kurtosis.ONWH<-append(Kurtosis.ONWH,kurtosis(PredictDayONWH(Num=Individual_ID9[j])))
+  Skewness.ONWH<-append(Skewness.ONWH,skewness(PredictDayONWH(Num=Individual_ID9[j])))
+  Variance.ONWH<-append(Variance.ONWH,var(PredictDayONWH(Num=Individual_ID9[j])))
+}
+
+##Find average variance.
+mean(Variance.ONWH)
+
+###Find start date starting with 1 
+Start.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide[-1])[apply(Mating.Matrix.Data.ONWH_Wide[-1] != 0, 1, which.max)])
+Start.date.ONWH
+
+###Find end date
+End.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide)[-1][max.col(Mating.Matrix.Data.ONWH_Wide[-1] != 0, 'last')])
+End.date.ONWH
+
+###Find duration
+Duration.ONWH<-End.date.ONWH-Start.date.ONWH
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONWH<-as.vector(Kurtosis.ONWH-mean(Kurtosis.ONWH))/sd(Kurtosis.ONWH)
+Skew.norm.ONWH<-as.vector(Skewness.ONWH-mean(Skewness.ONWH))/sd(Skewness.ONWH)
+Var.norm.ONWH<-as.vector(Variance.ONWH-mean(Variance.ONWH))/sd(Variance.ONWH)
+Start.date.norm.ONWH<-as.vector(Start.date.ONWH-mean(Start.date.ONWH))/sd(Start.date.ONWH)
+Duration.norm.ONWH<-as.vector(Duration.ONWH-mean(Duration.ONWH))/sd(Duration.ONWH)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONWH<-as.matrix(Kurt.norm.ONWH) 
+trait.matrix.k.ONWH<- scale(trait.matrix.raw.k.ONWH)
+#Rho  -- Kurtosis
+rho.matrix.k.ONWH <- t(trait.matrix.k.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.k.ONWH
+rho.matrix.k.ONWH
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONWH<-as.matrix(Skew.norm.ONWH)
+trait.matrix.s.ONWH<- scale(trait.matrix.raw.s.ONWH)
+#Rho -- Skewness
+rho.matrix.s.ONWH <- t(trait.matrix.s.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.s.ONWH
+rho.matrix.s.ONWH
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONWH<-as.matrix(Start.date.norm.ONWH) 
+trait.matrix.st.ONWH<- scale(trait.matrix.raw.st.ONWH)
+#Rho -- Start date
+rho.matrix.st.ONWH <- t(trait.matrix.st.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.st.ONWH
+rho.matrix.st.ONWH
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONWH<-as.matrix(Duration.norm.ONWH)
+trait.matrix.d.ONWH<- scale(trait.matrix.raw.d.ONWH)
+#Rho -- Duration
+rho.matrix.d.ONWH <- t(trait.matrix.d.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.d.ONWH
+rho.matrix.d.ONWH
+
+```
+```{r}
+##NJHP Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just NJHP population
+NJHP<-subset(Flwr,Flwr$Pop=="NJHP")
+NJHP
+
+#PredictDay function for NJHP dataset
+PredictDayNJHP<-function(Num,days=c(0:125)){
+  Mod10<-gam(OpFlwr~s(AbsDay),data=NJHP[NJHP$Num==Num,]) #Fitting Gam model.
+  PredDay10<-predict(Mod10,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay10[PredDay10<0]<-0 #Changing negative values to zero.
+return(PredDay10)
+}
+
+Individual_ID10<-unique(NJHP$Num) 
+
+#For-loop
+Days10<-c()
+Individual10<-c()
+Flowers10<-c()
+count10=0
+for( j in 1:length(Individual_ID10)){
+    count10=count10+1
+  Flowers10<-append(Flowers10,PredictDayNJHP(Num=Individual_ID10[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual10<-append(Individual10,rep(Individual_ID10[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days10<-append(Days10,0:125)
+}
+
+
+Mating.Matrix.Data.NJHP_Long<-data.frame(Flowers10,Individual10,Days10)
+Mating.Matrix.Data.NJHP_Wide<-Mating.Matrix.Data.NJHP_Long %>% pivot_wider(names_from = Days10,values_from = Flowers10)
+Mating.Matrix.Data.NJHP_Wide<-dplyr :: select(Mating.Matrix.Data.NJHP_Wide,-(Individual10)) #dyplr package included in command line to troubleshoot an error message.
+
+##Mating matrix just NJHP population
+
+flr.matrix.NJHP<-as.matrix(Mating.Matrix.Data.NJHP_Wide)
+#Mother/Father matrices
+mother.flr.matrix.NJHP<- flr.matrix.NJHP/sum(flr.matrix.NJHP)
+father.colsum.NJHP<- apply(flr.matrix.NJHP, 2,  sum)
+father.flr.matrix.NJHP<- apply(flr.matrix.NJHP, 1, function(d) d/father.colsum.NJHP) #don't understand this line
+mating.matrix.NJHP <- mother.flr.matrix.NJHP %*% father.flr.matrix.NJHP #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.NJHP<- sum(mating.matrix.NJHP) #should be 1
+
+
+##Principal component analysis for S of NJHP population
+
+prcomp(mating.matrix.NJHP,scale=FALSE)
+X10<-eigen(mating.matrix.NJHP,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for NJHP
+Y10<-X10$values
+S.NJHP<-Y10[1]/sum(Y10)
+S.NJHP
+
+
+
+###Trait matrix and finding Rho for each trait NJHP
+#Find moments
+Kurtosis.NJHP<-c()
+Skewness.NJHP<-c()
+Variance.NJHP<-c()
+Start.date.NJHP<-c()
+End.date.NJHP<-c()
+Duration.NJHP<-c()
+count10=0
+Mom.NJHP<-for( j in 1:length(Individual_ID10)){
+    count10=count10+1
+  Kurtosis.NJHP<-append(Kurtosis.NJHP,kurtosis(PredictDayNJHP(Num=Individual_ID10[j])))
+  Skewness.NJHP<-append(Skewness.NJHP,skewness(PredictDayNJHP(Num=Individual_ID10[j])))
+  Variance.NJHP<-append(Variance.NJHP,var(PredictDayNJHP(Num=Individual_ID10[j])))
+}
+
+##Find average variance.
+mean(Variance.NJHP)
+
+###Find start date starting with 1 
+Start.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide[-1])[apply(Mating.Matrix.Data.NJHP_Wide[-1] != 0, 1, which.max)])
+Start.date.NJHP
+
+###Find end date
+End.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide)[-1][max.col(Mating.Matrix.Data.NJHP_Wide[-1] != 0, 'last')])
+End.date.NJHP
+
+###Find duration
+Duration.NJHP<-End.date.NJHP-Start.date.NJHP
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.NJHP<-as.vector(Kurtosis.NJHP-mean(Kurtosis.NJHP))/sd(Kurtosis.NJHP)
+Skew.norm.NJHP<-as.vector(Skewness.NJHP-mean(Skewness.NJHP))/sd(Skewness.NJHP)
+Var.norm.NJHP<-as.vector(Variance.NJHP-mean(Variance.NJHP))/sd(Variance.NJHP)
+Start.date.norm.NJHP<-as.vector(Start.date.NJHP-mean(Start.date.NJHP))/sd(Start.date.NJHP)
+Duration.norm.NJHP<-as.vector(Duration.NJHP-mean(Duration.NJHP))/sd(Duration.NJHP)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.NJHP<-as.matrix(Kurt.norm.NJHP) 
+trait.matrix.k.NJHP<- scale(trait.matrix.raw.k.NJHP)
+#Rho  -- Kurtosis
+rho.matrix.k.NJHP <- t(trait.matrix.k.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.k.NJHP
+rho.matrix.k.NJHP
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.NJHP<-as.matrix(Skew.norm.NJHP)
+trait.matrix.s.NJHP<- scale(trait.matrix.raw.s.NJHP)
+#Rho -- Skewness
+rho.matrix.s.NJHP <- t(trait.matrix.s.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.s.NJHP
+rho.matrix.s.NJHP
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.NJHP<-as.matrix(Start.date.norm.NJHP) 
+trait.matrix.st.NJHP<- scale(trait.matrix.raw.st.NJHP)
+#Rho -- Start date
+rho.matrix.st.NJHP <- t(trait.matrix.st.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.st.NJHP
+rho.matrix.st.NJHP
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.NJHP<-as.matrix(Duration.norm.NJHP)
+trait.matrix.d.NJHP<- scale(trait.matrix.raw.d.NJHP)
+#Rho -- Duration
+rho.matrix.d.NJHP <- t(trait.matrix.d.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.d.NJHP
+rho.matrix.d.NJHP
+
+```
+```{r}
+##ONNO Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONNO population
+ONNO<-subset(Flwr,Flwr$Pop=="ONNO")
+ONNO
+
+#PredictDay function for ONNO dataset
+PredictDayONNO<-function(Num,days=c(0:125)){
+  Mod11<-gam(OpFlwr~s(AbsDay),data=ONNO[ONNO$Num==Num,]) #Fitting Gam model.
+  PredDay11<-predict(Mod11,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay11[PredDay11<0]<-0 #Changing negative values to zero.
+return(PredDay11)
+}
+
+Individual_ID11<-unique(ONNO$Num) 
+
+#For-loop
+Days11<-c()
+Individual11<-c()
+Flowers11<-c()
+count11=0
+for( j in 1:length(Individual_ID11)){
+    count11=count11+1
+  Flowers11<-append(Flowers11,PredictDayONNO(Num=Individual_ID11[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual11<-append(Individual11,rep(Individual_ID11[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days11<-append(Days11,0:125)
+}
+
+
+Mating.Matrix.Data.ONNO_Long<-data.frame(Flowers11,Individual11,Days11)
+Mating.Matrix.Data.ONNO_Wide<-Mating.Matrix.Data.ONNO_Long %>% pivot_wider(names_from = Days11,values_from = Flowers11)
+Mating.Matrix.Data.ONNO_Wide<-dplyr :: select(Mating.Matrix.Data.ONNO_Wide,-(Individual11)) #dplyr package included in command line to troubleshoot an error message.
+
+##Mating matrix just ONNO population
+
+flr.matrix.ONNO<-as.matrix(Mating.Matrix.Data.ONNO_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONNO<- flr.matrix.ONNO/sum(flr.matrix.ONNO)
+father.colsum.ONNO<- apply(flr.matrix.ONNO, 2,  sum)
+father.flr.matrix.ONNO<- apply(flr.matrix.ONNO, 1, function(d) d/father.colsum.ONNO) #don't understand this line
+mating.matrix.ONNO <- mother.flr.matrix.ONNO %*% father.flr.matrix.ONNO #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONNO<- sum(mating.matrix.ONNO) #should be 1
+
+
+##Principal component analysis for S of ONNO population
+
+prcomp(mating.matrix.ONNO,scale=FALSE)
+X11<-eigen(mating.matrix.ONNO,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONNO
+Y11<-X11$values
+S.ONNO<-Y11[1]/sum(Y11)
+S.ONNO
+
+
+
+###Trait matrix and finding Rho for each trait ONNO
+#Find moments
+Kurtosis.ONNO<-c()
+Skewness.ONNO<-c()
+Variance.ONNO<-c()
+Start.date.ONNO<-c()
+End.date.ONNO<-c()
+Duration.ONNO<-c()
+count11=0
+Mom.ONNO<-for( j in 1:length(Individual_ID11)){
+    count11=count11+1
+  Kurtosis.ONNO<-append(Kurtosis.ONNO,kurtosis(PredictDayONNO(Num=Individual_ID11[j])))
+  Skewness.ONNO<-append(Skewness.ONNO,skewness(PredictDayONNO(Num=Individual_ID11[j])))
+  Variance.ONNO<-append(Variance.ONNO,var(PredictDayONNO(Num=Individual_ID11[j])))
+}
+
+##Find average variance.
+mean(Variance.ONNO)
+
+
+###Find start date starting with 1 
+Start.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide[-1])[apply(Mating.Matrix.Data.ONNO_Wide[-1] != 0, 1, which.max)])
+Start.date.ONNO
+
+###Find end date
+End.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide)[-1][max.col(Mating.Matrix.Data.ONNO_Wide[-1] != 0, 'last')])
+End.date.ONNO
+
+###Find duration
+Duration.ONNO<-End.date.ONNO-Start.date.ONNO
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONNO<-as.vector(Kurtosis.ONNO-mean(Kurtosis.ONNO))/sd(Kurtosis.ONNO)
+Skew.norm.ONNO<-as.vector(Skewness.ONNO-mean(Skewness.ONNO))/sd(Skewness.ONNO)
+Var.norm.ONNO<-as.vector(Variance.ONNO-mean(Variance.ONNO))/sd(Variance.ONNO)
+Start.date.norm.ONNO<-as.vector(Start.date.ONNO-mean(Start.date.ONNO))/sd(Start.date.ONNO)
+Duration.norm.ONNO<-as.vector(Duration.ONNO-mean(Duration.ONNO))/sd(Duration.ONNO)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONNO<-as.matrix(Kurt.norm.ONNO) 
+trait.matrix.k.ONNO<- scale(trait.matrix.raw.k.ONNO)
+#Rho  -- Kurtosis
+rho.matrix.k.ONNO <- t(trait.matrix.k.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.k.ONNO
+rho.matrix.k.ONNO
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONNO<-as.matrix(Skew.norm.ONNO)
+trait.matrix.s.ONNO<- scale(trait.matrix.raw.s.ONNO)
+#Rho -- Skewness
+rho.matrix.s.ONNO <- t(trait.matrix.s.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.s.ONNO
+rho.matrix.s.ONNO
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONNO<-as.matrix(Start.date.norm.ONNO) 
+trait.matrix.st.ONNO<- scale(trait.matrix.raw.st.ONNO)
+#Rho -- Start date
+rho.matrix.st.ONNO <- t(trait.matrix.st.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.st.ONNO
+rho.matrix.st.ONNO
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONNO<-as.matrix(Duration.norm.ONNO)
+trait.matrix.d.ONNO<- scale(trait.matrix.raw.d.ONNO)
+#Rho -- Duration
+rho.matrix.d.ONNO <- t(trait.matrix.d.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.d.ONNO
+rho.matrix.d.ONNO
+
+```
+```{r}
+##NYCH Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just NYCH population
+NYCH<-subset(Flwr,Flwr$Pop=="NYCH")
+NYCH
+
+#PredictDay function for NYCH dataset
+PredictDayNYCH<-function(Num,days=c(0:125)){
+  Mod12<-gam(OpFlwr~s(AbsDay),data=NYCH[NYCH$Num==Num,]) #Fitting Gam model.
+  PredDay12<-predict(Mod12,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay12[PredDay12<0]<-0 #Changing negative values to zero.
+return(PredDay12)
+}
+
+Individual_ID12<-unique(NYCH$Num) 
+Individual_ID12<-Individual_ID12[Individual_ID12!=187]
+
+#For-loop
+Days12<-c()
+Individual12<-c()
+Flowers12<-c()
+count12=0
+for( j in 1:length(Individual_ID12)){
+    count12=count12+1
+  Flowers12<-append(Flowers12,PredictDayNYCH(Num=Individual_ID12[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual12<-append(Individual12,rep(Individual_ID12[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days12<-append(Days12,0:125)
+}
+
+
+Mating.Matrix.Data.NYCH_Long<-data.frame(Flowers12,Individual12,Days12)
+Mating.Matrix.Data.NYCH_Wide<-Mating.Matrix.Data.NYCH_Long %>% pivot_wider(names_from = Days12,values_from = Flowers12)
+Mating.Matrix.Data.NYCH_Wide<-dplyr :: select(Mating.Matrix.Data.NYCH_Wide,-(Individual12)) #dplyr package included in command line to troubleshoot an error message.
+
+##Mating matrix just NYCH population
+
+flr.matrix.NYCH<-as.matrix(Mating.Matrix.Data.NYCH_Wide)
+#Mother/Father matrices
+mother.flr.matrix.NYCH<- flr.matrix.NYCH/sum(flr.matrix.NYCH)
+father.colsum.NYCH<- apply(flr.matrix.NYCH, 2,  sum)
+father.flr.matrix.NYCH<- apply(flr.matrix.NYCH, 1, function(d) d/father.colsum.NYCH) #don't understand this line
+mating.matrix.NYCH <- mother.flr.matrix.NYCH %*% father.flr.matrix.NYCH #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.NYCH<- sum(mating.matrix.NYCH) #should be 1
+
+
+##Principal component analysis for S of NYCH population
+
+prcomp(mating.matrix.NYCH,scale=FALSE)
+X12<-eigen(mating.matrix.NYCH,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for NYCH
+Y12<-X12$values
+S.NYCH<-Y12[1]/sum(Y12)
+S.NYCH
+
+
+
+###Trait matrix and finding Rho for each trait NYCH
+#Find moments
+Kurtosis.NYCH<-c()
+Skewness.NYCH<-c()
+Variance.NYCH<-c()
+Start.date.NYCH<-c()
+End.date.NYCH<-c()
+Duration.NYCH<-c()
+count12=0
+Mom.NYCH<-for( j in 1:length(Individual_ID12)){
+    count12=count12+1
+  Kurtosis.NYCH<-append(Kurtosis.NYCH,kurtosis(PredictDayNYCH(Num=Individual_ID12[j])))
+  Skewness.NYCH<-append(Skewness.NYCH,skewness(PredictDayNYCH(Num=Individual_ID12[j])))
+  Variance.NYCH<-append(Variance.NYCH,var(PredictDayNYCH(Num=Individual_ID12[j])))
+}
+
+##Find average variance.
+mean(Variance.NYCH)
+
+###Find start date starting with 1 
+Start.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide[-1])[apply(Mating.Matrix.Data.NYCH_Wide[-1] != 0, 1, which.max)])
+Start.date.NYCH
+
+###Find end date
+End.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide)[-1][max.col(Mating.Matrix.Data.NYCH_Wide[-1] != 0, 'last')])
+End.date.NYCH
+
+###Find duration
+Duration.NYCH<-End.date.NYCH-Start.date.NYCH
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.NYCH<-as.vector(Kurtosis.NYCH-mean(Kurtosis.NYCH))/sd(Kurtosis.NYCH)
+Skew.norm.NYCH<-as.vector(Skewness.NYCH-mean(Skewness.NYCH))/sd(Skewness.NYCH)
+Var.norm.NYCH<-as.vector(Variance.NYCH-mean(Variance.NYCH))/sd(Variance.NYCH)
+Start.date.norm.NYCH<-as.vector(Start.date.NYCH-mean(Start.date.NYCH))/sd(Start.date.NYCH)
+Duration.norm.NYCH<-as.vector(Duration.NYCH-mean(Duration.NYCH))/sd(Duration.NYCH)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.NYCH<-as.matrix(Kurt.norm.NYCH) 
+trait.matrix.k.NYCH<- scale(trait.matrix.raw.k.NYCH)
+#Rho  -- Kurtosis
+rho.matrix.k.NYCH <- t(trait.matrix.k.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.k.NYCH
+rho.matrix.k.NYCH
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.NYCH<-as.matrix(Skew.norm.NYCH)
+trait.matrix.s.NYCH<- scale(trait.matrix.raw.s.NYCH)
+#Rho -- Skewness
+rho.matrix.s.NYCH <- t(trait.matrix.s.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.s.NYCH
+rho.matrix.s.NYCH
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.NYCH<-as.matrix(Start.date.norm.NYCH) 
+trait.matrix.st.NYCH<- scale(trait.matrix.raw.st.NYCH)
+#Rho -- Start date
+rho.matrix.st.NYCH <- t(trait.matrix.st.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.st.NYCH
+rho.matrix.st.NYCH
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.NYCH<-as.matrix(Duration.norm.NYCH)
+trait.matrix.d.NYCH<- scale(trait.matrix.raw.d.NYCH)
+#Rho -- Duration
+rho.matrix.d.NYCH <- t(trait.matrix.d.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.d.NYCH
+rho.matrix.d.NYCH
+
+```
+```{r}
+##ONPG Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just ONPG population
+ONPG<-subset(Flwr,Flwr$Pop=="ONPG")
+ONPG
+
+#PredictDay function for ONPG dataset
+PredictDayONPG<-function(Num,days=c(0:125)){
+  Mod13<-gam(OpFlwr~s(AbsDay),data=ONPG[ONPG$Num==Num,]) #Fitting Gam model.
+  PredDay13<-predict(Mod13,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay13[PredDay13<0]<-0 #Changing negative values to zero.
+return(PredDay13)
+}
+
+Individual_ID13<-unique(ONPG$Num) 
+
+#For-loop
+Days13<-c()
+Individual13<-c()
+Flowers13<-c()
+count13=0
+for( j in 1:length(Individual_ID13)){
+    count13=count13+1
+  Flowers13<-append(Flowers13,PredictDayONPG(Num=Individual_ID13[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual13<-append(Individual13,rep(Individual_ID13[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days13<-append(Days13,0:125)
+}
+
+
+Mating.Matrix.Data.ONPG_Long<-data.frame(Flowers13,Individual13,Days13)
+Mating.Matrix.Data.ONPG_Wide<-Mating.Matrix.Data.ONPG_Long %>% pivot_wider(names_from = Days13,values_from = Flowers13)
+Mating.Matrix.Data.ONPG_Wide<-dplyr :: select(Mating.Matrix.Data.ONPG_Wide,-(Individual13)) #dplyr package included in command line to troubleshoot an error message.
+
+##Mating matrix just ONPG population
+
+flr.matrix.ONPG<-as.matrix(Mating.Matrix.Data.ONPG_Wide)
+#Mother/Father matrices
+mother.flr.matrix.ONPG<- flr.matrix.ONPG/sum(flr.matrix.ONPG)
+father.colsum.ONPG<- apply(flr.matrix.ONPG, 2,  sum)
+father.flr.matrix.ONPG<- apply(flr.matrix.ONPG, 1, function(d) d/father.colsum.ONPG) #don't understand this line
+mating.matrix.ONPG <- mother.flr.matrix.ONPG %*% father.flr.matrix.ONPG #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.ONPG<- sum(mating.matrix.ONPG) #should be 1
+
+
+##Principal component analysis for S of ONNO population
+
+prcomp(mating.matrix.ONPG,scale=FALSE)
+X13<-eigen(mating.matrix.ONPG,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for ONNO
+Y13<-X13$values
+S.ONPG<-Y13[1]/sum(Y13)
+S.ONPG
+
+
+
+###Trait matrix and finding Rho for each trait ONNO
+#Find moments
+Kurtosis.ONPG<-c()
+Skewness.ONPG<-c()
+Variance.ONPG<-c()
+Start.date.ONPG<-c()
+End.date.ONPG<-c()
+Duration.ONPG<-c()
+count13=0
+Mom.ONPG<-for( j in 1:length(Individual_ID13)){
+    count13=count13+1
+  Kurtosis.ONPG<-append(Kurtosis.ONPG,kurtosis(PredictDayONPG(Num=Individual_ID13[j])))
+  Skewness.ONPG<-append(Skewness.ONPG,skewness(PredictDayONPG(Num=Individual_ID13[j])))
+  Variance.ONPG<-append(Variance.ONPG,var(PredictDayONPG(Num=Individual_ID13[j])))
+}
+
+##Find average variance.
+mean(Variance.ONPG)
+
+###Find start date starting with 1 
+Start.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide[-1])[apply(Mating.Matrix.Data.ONPG_Wide[-1] != 0, 1, which.max)])
+Start.date.ONPG
+
+###Find end date
+End.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide)[-1][max.col(Mating.Matrix.Data.ONPG_Wide[-1] != 0, 'last')])
+End.date.ONPG
+
+###Find duration
+Duration.ONPG<-End.date.ONPG-Start.date.ONPG
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.ONPG<-as.vector(Kurtosis.ONPG-mean(Kurtosis.ONPG))/sd(Kurtosis.ONPG)
+Skew.norm.ONPG<-as.vector(Skewness.ONPG-mean(Skewness.ONPG))/sd(Skewness.ONPG)
+Var.norm.ONPG<-as.vector(Variance.ONPG-mean(Variance.ONPG))/sd(Variance.ONPG)
+Start.date.norm.ONPG<-as.vector(Start.date.ONPG-mean(Start.date.ONPG))/sd(Start.date.ONPG)
+Duration.norm.ONPG<-as.vector(Duration.ONPG-mean(Duration.ONPG))/sd(Duration.ONPG)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.ONPG<-as.matrix(Kurt.norm.ONPG) 
+trait.matrix.k.ONPG<- scale(trait.matrix.raw.k.ONPG)
+#Rho  -- Kurtosis
+rho.matrix.k.ONPG <- t(trait.matrix.k.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.k.ONPG
+rho.matrix.k.ONPG
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.ONPG<-as.matrix(Skew.norm.ONPG)
+trait.matrix.s.ONPG<- scale(trait.matrix.raw.s.ONPG)
+#Rho -- Skewness
+rho.matrix.s.ONPG <- t(trait.matrix.s.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.s.ONPG
+rho.matrix.s.ONPG
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.ONPG<-as.matrix(Start.date.norm.ONPG) 
+trait.matrix.st.ONPG<- scale(trait.matrix.raw.st.ONPG)
+#Rho -- Start date
+rho.matrix.st.ONPG <- t(trait.matrix.st.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.st.ONPG
+rho.matrix.st.ONPG
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.ONPG<-as.matrix(Duration.norm.ONPG)
+trait.matrix.d.ONPG<- scale(trait.matrix.raw.d.ONPG)
+#Rho -- Duration
+rho.matrix.d.ONPG <- t(trait.matrix.d.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.d.ONPG
+rho.matrix.d.ONPG
+
+```
+```{r}
+##NJPT Population
+
+
+##Create table of GAM predicted # of open flowers/day/individual for just NJPT population
+NJPT<-subset(Flwr,Flwr$Pop=="NJPT")
+NJPT
+
+#PredictDay function for NJPT dataset
+PredictDayNJPT<-function(Num,days=c(0:125)){
+  Mod14<-gam(OpFlwr~s(AbsDay),data=NJPT[NJPT$Num==Num,]) #Fitting Gam model.
+  PredDay14<-predict(Mod14,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay14[PredDay14<0]<-0 #Changing negative values to zero.
+return(PredDay14)
+}
+
+Individual_ID14<-unique(NJPT$Num) 
+
+#For-loop
+Days14<-c()
+Individual14<-c()
+Flowers14<-c()
+count14=0
+for( j in 1:length(Individual_ID14)){
+    count14=count14+1
+  Flowers14<-append(Flowers14,PredictDayNJPT(Num=Individual_ID14[j]))#Here use j to subset each individual in the individual ID vector. 
+  Individual14<-append(Individual14,rep(Individual_ID14[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days14<-append(Days14,0:125)
+}
+
+
+Mating.Matrix.Data.NJPT_Long<-data.frame(Flowers14,Individual14,Days14)
+Mating.Matrix.Data.NJPT_Wide<-Mating.Matrix.Data.NJPT_Long %>% pivot_wider(names_from = Days14,values_from = Flowers14)
+Mating.Matrix.Data.NJPT_Wide<-dplyr :: select(Mating.Matrix.Data.NJPT_Wide,-(Individual14)) #dplyr package included in command line to troubleshoot an error message.
+
+##Mating matrix just NJPT population
+
+flr.matrix.NJPT<-as.matrix(Mating.Matrix.Data.NJPT_Wide)
+#Mother/Father matrices
+mother.flr.matrix.NJPT<- flr.matrix.NJPT/sum(flr.matrix.NJPT)
+father.colsum.NJPT<- apply(flr.matrix.NJPT, 2,  sum)
+father.flr.matrix.NJPT<- apply(flr.matrix.NJPT, 1, function(d) d/father.colsum.NJPT) #don't understand this line
+mating.matrix.NJPT <- mother.flr.matrix.NJPT %*% father.flr.matrix.NJPT #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
+sum.mating.matrix.NJPT<- sum(mating.matrix.NJPT) #should be 1
+
+
+##Principal component analysis for S of NJPT population
+
+prcomp(mating.matrix.NJPT,scale=FALSE)
+X14<-eigen(mating.matrix.NJPT,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
+
+##Finding S for NJPT
+Y14<-X14$values
+S.NJPT<-Y14[1]/sum(Y14)
+S.NJPT
+
+
+
+###Trait matrix and finding Rho for each trait ONNO
+#Find moments
+Kurtosis.NJPT<-c()
+Skewness.NJPT<-c()
+Variance.NJPT<-c()
+Start.date.NJPT<-c()
+End.date.NJPT<-c()
+Duration.NJPT<-c()
+count14=0
+Mom.NJPT<-for( j in 1:length(Individual_ID14)){
+    count14=count14+1
+  Kurtosis.NJPT<-append(Kurtosis.NJPT,kurtosis(PredictDayNJPT(Num=Individual_ID14[j])))
+  Skewness.NJPT<-append(Skewness.NJPT,skewness(PredictDayNJPT(Num=Individual_ID14[j])))
+  Variance.NJPT<-append(Variance.NJPT,var(PredictDayNJPT(Num=Individual_ID14[j])))
+}
+
+##Finding average variance.
+mean(Variance.NJPT)
+
+###Find start date starting with 1 
+Start.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide[-1])[apply(Mating.Matrix.Data.NJPT_Wide[-1] != 0, 1, which.max)])
+Start.date.NJPT
+
+###Find end date
+End.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide)[-1][max.col(Mating.Matrix.Data.NJPT_Wide[-1] != 0, 'last')])
+End.date.NJPT
+
+###Find duration
+Duration.NJPT<-End.date.NJPT-Start.date.NJPT
+
+###Vector of PC1 ####
+
+##Find z -- vector containing the normalized phenotypic value 
+Kurt.norm.NJPT<-as.vector(Kurtosis.NJPT-mean(Kurtosis.NJPT))/sd(Kurtosis.NJPT)
+Skew.norm.NJPT<-as.vector(Skewness.NJPT-mean(Skewness.NJPT))/sd(Skewness.NJPT)
+Var.norm.NJPT<-as.vector(Variance.NJPT-mean(Variance.NJPT))/sd(Variance.NJPT)
+Start.date.norm.NJPT<-as.vector(Start.date.NJPT-mean(Start.date.NJPT))/sd(Start.date.NJPT)
+Duration.norm.NJPT<-as.vector(Duration.NJPT-mean(Duration.NJPT))/sd(Duration.NJPT)
+
+#Trait matrix -- Kurtosis
+trait.matrix.raw.k.NJPT<-as.matrix(Kurt.norm.NJPT) 
+trait.matrix.k.NJPT<- scale(trait.matrix.raw.k.NJPT)
+#Rho  -- Kurtosis
+rho.matrix.k.NJPT <- t(trait.matrix.k.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.k.NJPT
+rho.matrix.k.NJPT
+
+
+#Trait matrix -- Skewness
+trait.matrix.raw.s.NJPT<-as.matrix(Skew.norm.NJPT)
+trait.matrix.s.NJPT<- scale(trait.matrix.raw.s.NJPT)
+#Rho -- Skewness
+rho.matrix.s.NJPT <- t(trait.matrix.s.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.s.NJPT
+rho.matrix.s.NJPT
+
+## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+
+#Trait matrix -- Start date
+trait.matrix.raw.st.NJPT<-as.matrix(Start.date.norm.NJPT) 
+trait.matrix.st.NJPT<- scale(trait.matrix.raw.st.NJPT)
+#Rho -- Start date
+rho.matrix.st.NJPT <- t(trait.matrix.st.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.st.NJPT
+rho.matrix.st.NJPT
+
+#Trait matrix -- Duration
+trait.matrix.raw.d.NJPT<-as.matrix(Duration.norm.NJPT)
+trait.matrix.d.NJPT<- scale(trait.matrix.raw.d.NJPT)
+#Rho -- Duration
+rho.matrix.d.NJPT <- t(trait.matrix.d.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.d.NJPT
+rho.matrix.d.NJPT
+
+```
+```{r}
+#Mean kurtosis x population code
+mean(Kurtosis.ONEC)
+mean(Kurtosis.ONRO)
+mean(Kurtosis.NYSC)
+mean(Kurtosis.NYLV)
+mean(Kurtosis.ONDM)
+mean(Kurtosis.ONTI)
+mean(Kurtosis.MDDB)
+mean(Kurtosis.ONWH)
+mean(Kurtosis.NJHP)
+mean(Kurtosis.ONNO)
+mean(Kurtosis.NYCH)
+mean(Kurtosis.ONPG)
+mean(Kurtosis.NJPT)
+
+
+#Mean skewness x population code
+mean(Skewness.ONEC)
+mean(Skewness.ONRO)
+mean(Skewness.NYSC)
+mean(Skewness.NYLV)
+mean(Skewness.ONDM)
+mean(Skewness.ONTI)
+mean(Skewness.MDDB)
+mean(Skewness.ONWH)
+mean(Skewness.NJHP)
+mean(Skewness.ONNO)
+mean(Skewness.NYCH)
+mean(Skewness.ONPG)
+mean(Skewness.NJPT)
+```
+
+```{r}
+#Rho matrix
+rho.matrix <- t(trait.matrix) %*% mating.matrix %*% trait.matrix #Z transpose*phi*Z 
+pheno.matrix<- var(trait.matrix)
+path.matrix<-  solve(pheno.matrix) %*% rho.matrix
+
+
+#calculate variance in trait among all plants; var(); if positive, tend to mate similarly; if negative, tend to mate oppositely
+#Let's say z is our vector of a trait -- each cell is an individual observation for a specific plant, so variance=sum(z-mean(z))
+#var = sum((z-mean(z))^2)/(length(z)-1)
+#used to compare with inflated variance upon assortative mating 
+##Don't think we need anything after this point
+
+#Find start date
+##Method 1
+Start.date<-names(Mating.Matrix.Data_Wide2)[max.col(Mating.Matrix.Data_Wide2 != 0, ties.method = "first")]
+##Method 2
+#Start date starting with 0
+names(Mating.Matrix.Data_Wide2)[apply(Mating.Matrix.Data_Wide2 != 0, 1, which.max)]
+
+
+#Select individuals to act as mothers
+bootstrapped.index.M <- sample(index, N, replace=T)  
+bootstrapped.sample.M <- Mating.Matrix.Data_Wide[bootstrapped.index.M,]
+flr.matrix.M<-as.matrix(bootstrapped.sample.M[,11:36])
+trait.matrix.raw.M<-as.matrix(bootstrapped.sample.M[,4:10])  
+trait.matrix.std.M<- scale(trait.matrix.raw.M)	
+
+#Select individuals to act as fathers
+bootstrapped.index.F <- sample(index, N, replace=T)  
+bootstrapped.sample.F <- Mating.Matrix.Data_Wide[bootstrapped.index.F,]
+flr.matrix.F<-as.matrix(bootstrapped.sample.F[,11:36])
+trait.matrix.raw.F<-as.matrix(bootstrapped.sample.F[,4:10])
+trait.matrix.std.F<- scale(trait.matrix.raw.F)
+father.colsum<- apply(flr.matrix.F, 2,  sum)
+father.flr.matrix<- apply(flr.matrix.F, 1, function(d) d/father.colsum)
+
+
+#Creates the between-mate correlation matrix ("R" matrix)
+rho.matrix <- t(trait.matrix.std.M) %*% mating.matrix %*% trait.matrix.std.F
+rho.output.row <- as.vector(rho.matrix)
+output.table.rho2 <- rbind(output.table.rho2, rho.output.row)
+
+ncol(trait.matrix.std.M) #7
+nrow(trait.matrix.std.M) #1
+
+ncol(mating.matrix) #386
+nrow(mating.matrix) #386
+
+ncol(trait.matrix.std.F) #7
+nrow(trait.matrix.std.F) #1
+
+scale(mating.matrix)
+```
