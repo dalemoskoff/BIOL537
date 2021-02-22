@@ -1,0 +1,194 @@
+---
+title: "Data Modelling"
+author: "Dale Moskoff"
+date: "11/02/2021"
+output: html_document
+---
+
+```{r}
+#Load library and data.
+
+library(ggplot2)
+library(dplyr)
+library(stats)
+setwd("/Users/dalemoskoff/Desktop/Biology/BIOL 537")
+Results<-read.csv("rawresults.csv")
+Results<-arrange(Results,desc(Latitude)) 
+Results
+```
+
+```{r}
+### Plot of points S values ###
+
+theme_orig<- function(base_size=12,base_family="") {
+  theme_classic(base_size=base_size,base_family=base_family) %+replace%
+    theme(
+      axis.text=element_text(colour="black"),
+      axis.title.x=element_text(size=14),
+      axis.text.x=element_text(size=12, angle=45),
+      axis.title.y=element_text(size=14,angle=90),
+      axis.text.y=element_text(size=12),
+      axis.ticks=element_line(colour="black"),
+      panel.background=element_rect(fill="white"),
+      plot.title=element_text(face="bold",size=16),
+      legend.position="none",
+      panel.border=element_blank()
+    )}
+p<-ggplot() + theme_classic()
+d<-ggplot() + theme_orig()
+
+
+
+## Point graph of Latitude x S Value
+SPoint<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=S.Value))
+SPoint #Lots of noise.
+##Add regression line.
+reg<-lm(S.Value~Latitude,data=Results)
+reg
+SPointReg<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=S.Value)) + geom_abline(intercept=0.35199,slope=0.00996,colour="red")
+SPointReg ##Positive relationship 
+
+##Add a blue line where for the S value of whole pop
+SPointReg2<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=S.Value)) + geom_abline(intercept=0.35199,slope=0.00996,colour="red") + geom_abline(intercept=0.67726,slope=0,colour="blue")
+SPointReg2
+
+## Point graph of Population code x S value (population codes arranged in order of descending latitude)
+SPointPop<-d +
+  geom_point(data=Results,mapping=aes(x=Population,y=S.Value)) + geom_point(data=Results[Results$Population=="Whole.Sample",],mapping=aes(x=Population, y=S.Value), colour="red") ##Population codes are in order of descending latitude, and this graph includes the whole population.
+
+Results[Results$Population=="Whole.Sample",] #Check value for whole.sample.
+SPointPop2<-d +
+  geom_point(data=Results,mapping=aes(x=Population,y=S.Value)) + geom_abline(intercept=0.67726,slope=0,colour="blue") ##Same graph as above but with a blue line indicating the whole sample S value. 
+SPointPop2
+
+##Smoothed graph of S values x Latitude
+SSmooth<-p +
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=S.Value))
+SSmooth
+```
+
+```{r}
+###Plot of mean variance ###
+
+###Mean variance by population code
+VarPointPop<-d +
+  geom_point(data=Results,mapping=aes(x=Population,y=Mean.Variance))
+VarPointPop #Didn't calculate overall mean variance (didn't think it was interesting/informative) so this plot is pretty useless since its by population code. 
+
+##Mean variance by latitude.
+VarSmooth<-p +
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.Variance))
+VarSmooth
+
+##Mean variance by latitude, point plot with regression line.
+#Fit regression line.
+reg1<-lm(Mean.Variance~Latitude,data=Results)
+reg1
+#Create plot
+VarPointLat2<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=Mean.Variance)) + geom_abline(intercept=3.80e-02,slope=-7.51e-05,colour="red")
+VarPointLat2
+```
+```{r}
+###Plot of mean PC1 ###
+
+###Mean PC1 by population code
+VarPointPop<-d +
+  geom_point(data=Results,mapping=aes(x=Population,y=Mean.PC1))
+VarPointPop
+
+##Mean PC1 by latitude.
+VarSmooth<-p +
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.PC1))
+VarSmooth ##Shows a nice relationship.
+
+
+##Mean PC1 by latitude with regression line.
+#Fit regression line
+reg2<-lm(Mean.PC1~Latitude,data=Results)
+reg2
+#Create plot
+VarPointReg<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=Mean.PC1)) + geom_abline(intercept= 15.511,slope=-0.353,colour="red")
+VarPointReg
+```
+
+```{r}
+### Rho for kurtosis by latitude 
+KurtPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Kurtosis))
+KurtPointLat
+#Fit regression line.
+reg3<-lm(Rho.Kurtosis~Latitude,data=Results)
+reg3
+#Add to plot.
+KurtPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Kurtosis)) + geom_abline(intercept=-0.28898,slope=0.00836,colour="red")
+KurtPointLat
+
+
+##Rho for kurtosis by population code (includes whole sample)
+Results[Results$Population=="Whole.Sample",]
+KurtPointPop<-d + geom_point(data=Results,mapping=aes(x=Population,y=Rho.Kurtosis)) + geom_abline(intercept=0.0272954,slope=0,colour="blue")
+KurtPointPop
+
+##Average kurtosis x latitude.
+AvgKurtSmooth<-p +
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.Kurtosis))
+AvgKurtSmooth
+```
+
+
+```{r}
+## Rho for skewness by latitude. ###
+
+SkewPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Skewness))
+SkewPointLat
+#Fit regression line.
+reg4<-lm(Rho.Skewness~Latitude,data=Results)
+reg4
+#Add to plot.
+SkewPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Skewness)) + geom_abline(intercept=-0.16458,slope=0.00544,colour="red")
+SkewPointLat
+
+
+##Rho for skewness by population code (includes whole sample)
+Results[Results$Population=="Whole.Sample",]
+SkewPointPop<-d + geom_point(data=Results,mapping=aes(x=Population,y=Rho.Skewness)) + geom_abline(intercept=0.00502939,slope=0,colour="blue")
+SkewPointPop
+
+##Average skewness x latitude.
+AvgSkewSmooth<-p +
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.Skewness))
+AvgSkewSmooth
+```
+
+```{r}
+## Rho for start date by latitude. 
+
+#Fit regression line.
+reg5<-lm(Rho.SD~Latitude,data=Results)
+reg5
+#Create point plot.
+SDPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.SD)) + geom_abline(intercept=0.08555,slope=0.00105,colour="red") ##One outlier point (rho>1) is making this plot hard to interpret. I will remove this point for now.
+SDPointLat
+
+```
+
+```{r}
+## Rho for duration by latitude. 
+
+#Fit regression line.
+reg6<-lm(Rho.Duration~Latitude,data=Results)
+reg6
+#Create point plot.
+DurPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Duration)) + geom_abline(intercept=-0.09373,slope=0.00445,colour="red")
+DurPointLat
+```
+
+```{r}
+
+
+
+```
