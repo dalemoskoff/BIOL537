@@ -68,73 +68,6 @@ for (i in 1:length(Individual_ID)) {
 
 MasterData
 ```
-#Old code -- from before troubleshooting GAM models.
-````{r}
-####
-#Function
-####
-
-PredictDay<-function(Num,days=c(0:125)){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=Flwr[Flwr$Num==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-} 
-
-
-
-####
-#For loop trouble shooting 
-####
-
-Individual_ID<-unique(Flwr$Num) 
-Individual_ID #See here, there are missing numbers in the Num column, so we cant just use the length. This explains why the loop failed on the sixth iteration, because there is no Num = 6 in the data. Instead we need to use this individual_ID vector to subset for the Individual numbers that are actually in the data set.
-
-
-#The loop initially stopped at individual #187. so i am going to remove that ID from the Individual ID Vector. IT looks like you (really) dont have enough data for this one... it is all NA.
-Flwr[Flwr$Num==187,] 
-
-#Removing number 154 from the ID list 
-Individual_ID<-Individual_ID[Individual_ID!=187]
-
-#The same thing happened at Individual 440 so i will remove that individual as well. 
-Flwr[Flwr$Num==440,] #Both of these faulty IDs have all AbsDay values as NA, which explains why they arent working.
-
-#Removing number 440 from the ID list 
-Individual_ID<-Individual_ID[Individual_ID!=440]
-
-
-
-
-####
-#For loop that now works  
-####
-
-Days<-c()
-Individual<-c()
-Flowers<-c()
-count=0
-for( j in 1:length(Individual_ID)){
-    count=count+1
-  Flowers<-append(Flowers,PredictDay(Num=Individual_ID[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual<-append(Individual,rep(Individual_ID[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days<-append(Days,0:125)
-}
-count #Now the loop worked and you have 386 individual growth rates in total (2 did not have enough data and were removed).
-
-####
-#Different Data Formats and Visualization 
-####
-
-
-#Putting growth rates into "long" format - this is good for plotting and other things depending on what you want.
-Mating.Matrix.Data_Long<-data.frame(Flowers,Individual,Days)
-
-
-#To convert the data to wide format, the original code we tried now works (after converting the flower data)
-Mating.Matrix.Data_Wide2<-Mating.Matrix.Data_Long %>% pivot_wider(names_from = Days,values_from = Flowers)
-Mating.Matrix.Data_Wide2<-dplyr :: select(Mating.Matrix.Data_Wide2,-(Individual))
-```
 
 #New code -- from after troubleshooting GAM models. 
 ```{r}
@@ -178,18 +111,9 @@ Mating.Matrix.Data_Wide<-dplyr :: select(Mating.Matrix.Data_Wide,-(Individual.x)
 
 
 ##Modelling##
-ggplot(dfset0[dfset0$Individual.x=="2",])+
+ggplot(dfset0[dfset0$Individual.x=="5",])+
   geom_line(aes(x=Days,y=Flowers,colour=as.factor(Individual.x)))+
   theme_classic() + scale_color_brewer(palette="Set1") #google colour brewer 
-
-```
-#Modeling from before troubleshooting.
-```{r}
-#For example, here i am showing the growth rate for all IDs that are <5 (too many get cluttered).
-ggplot(Mating.Matrix.Data_Long[Mating.Matrix.Data_Long$Individual=="2",])+
-  geom_line(aes(x=Days,y=Flowers,colour=as.factor(Individual)))+
-  theme_classic() + scale_color_brewer(palette="Set1") #google colour brewer 
-
 
 ```
 
@@ -229,7 +153,7 @@ Duration<-c()
   #Variance<-append(Variance,var(PredictDay(Num=Individual_ID[j])))
 #} 
 
-##New moments for loop with new dataset. 
+##New moments for-loop with new dataset. 
 Mom<-for( j in 1:length(Individual_ID)){
     count=count+1
   Focal<-dfset0[dfset0$Individual.x==Individual_ID[j],]
@@ -246,6 +170,9 @@ Mom<-for( j in 1:length(Individual_ID)){
 KurtosisProb<-Kurtosis/sum(Kurtosis)
 SkewnessProb<-Skewness/sum(Skewness)
 VarianceProb<-Variance/sum(Variance)
+
+##Find mean variance
+mean(VarianceProb)
 
 
 ###Find start date 
@@ -303,12 +230,12 @@ rho.matrix.d
 ```{r}
 ###List of PC1 ####
 length(Individual_ID)
-PC1<-Flwr %>% group_by(Num) %>% select(Num,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE)) %>% drop_na(PC1) #Can't use PC1 to find rho b/c NA values make the two matrices non-compatible (different lengths). Took the mean b/c there are multiple inputs for each individual #, but they are all the same number.
+PC1<-Flwr %>% group_by(Num) %>% dplyr :: select(Num,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE)) %>% drop_na(PC1) #Can't use PC1 to find rho b/c NA values make the two matrices non-compatible (different lengths). Took the mean b/c there are multiple inputs for each individual #, but they are all the same number.
 average.PC1<-mean(PC1$PC1)
 average.PC1 #Entire sample PC1 mean.
 
 ##Average PC1 by population code.##
-PC1.by.population<-Flwr %>% group_by(Pop) %>% select(Pop,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE))
+PC1.by.population<-Flwr %>% group_by(Pop) %>% dplyr :: select(Pop,PC1) %>% summarise(PC1=mean(PC1,na.rm=TRUE))
 PC1.by.population
 write.csv(PC1.by.population,"PC1 means by population.csv")
 
@@ -324,39 +251,71 @@ Y<-X$values
 S<-Y[1]/sum(Y)
 S
 ```
-
+#New Code ONEC
 ```{r}
 ##ONEC Population
-
+Individual_ID2<-unique(ONEC$Num) 
 
 ##Create table of GAM predicted # of open flowers/day/individual for just ONEC population
 ONEC<-subset(Flwr,Flwr$Pop=="ONEC")
 
-#PredictDay function for ONEC dataset
-PredictDayONEC<-function(Num,days=c(0:125)){
-  Mod2<-gam(OpFlwr~s(AbsDay),data=ONEC[ONEC$Num==Num,]) #Fitting Gam model.
+#Create MasterData
+MasterDataONEC<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONEC)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID2)) {
+  Focal<-subset(ONEC,ONEC$Num==Individual_ID2[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID2[i],length(AbsDay))) #Individual column
+  NewDataONEC<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONEC<-rbind(MasterDataONEC,NewDataONEC) #New data frame containing information for all individuals
+  print(Individual_ID2[i])
+}
+
+MasterDataONEC
+
+##GAM function 
+PredictDayONEC<-function(Num,days=c(0:125),df){
+  Mod2<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
   PredDay2<-predict(Mod2,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
   PredDay2[PredDay2<0]<-0 #Changing negative values to zero.
 return(PredDay2)
 }
 
-Individual_ID2<-unique(ONEC$Num) 
-
-#For-loop
-Days2<-c()
-Individual2<-c()
-Flowers2<-c()
-count2=0
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count=0
 for( j in 1:length(Individual_ID2)){
-    count2=count2+1
-  Flowers2<-append(Flowers2,PredictDayONEC(Num=Individual_ID2[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual2<-append(Individual2,rep(Individual_ID2[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days2<-append(Days2,0:125)
+    count=count+1
+  FocalFrame<-MasterDataONEC[MasterDataONEC$Individual==Individual_ID2[j],]
+  Flowers<-PredictDayONEC(Num=Individual_ID2[j],df=MasterDataONEC)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID2[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
 }
+count #Now the loop worked and you have 386 individual growth rates in total (2 did not have enough data and were removed).
+#Setting the value of Flowers to 0 where GAM was predicting past observed days of flowering.
+dfset0<-df3
 
-Mating.Matrix.Data.ONEC_Long<-data.frame(Flowers2,Individual2,Days2)
-Mating.Matrix.Data.ONEC_Wide<-Mating.Matrix.Data.ONEC_Long %>% pivot_wider(names_from = Days2,values_from = Flowers2)
-Mating.Matrix.Data.ONEC_Wide<- dplyr :: select(Mating.Matrix.Data.ONEC_Wide,-(Individual2))
+#To convert the data to wide format, the original code we tried now works (after converting the flower data)
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONEC_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONEC_Wide<-dplyr :: select(Mating.Matrix.Data.ONEC_Wide,-(Individual.x))  #Remove individual column.
 
 
 ##Mating matrix just ONEC population
@@ -369,7 +328,6 @@ father.flr.matrix.ONEC<- apply(flr.matrix.ONEC, 1, function(d) d/father.colsum.O
 mating.matrix.ONEC <- mother.flr.matrix.ONEC %*% father.flr.matrix.ONEC #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONEC<- sum(mating.matrix.ONEC) #should be 1
 
-
 ##Principal component analysis for S of ONEC population
 
 prcomp(mating.matrix.ONEC,scale=FALSE)
@@ -380,10 +338,9 @@ Y2<-X2$values
 S.ONEC<-Y2[1]/sum(Y2)
 S.ONEC
 
+#Trait matrix and finding Rho for each trait
 
-
-###Trait matrix and finding Rho for each trait ONEC
-#Find moments and probabilities of each moment.
+#Find moments.
 Kurtosis.ONEC<-c()
 Skewness.ONEC<-c()
 Variance.ONEC<-c()
@@ -393,9 +350,10 @@ Duration.ONEC<-c()
 count2=0
 Mom.ONEC<-for( j in 1:length(Individual_ID2)){
     count2=count2+1
-  Kurtosis.ONEC<-append(Kurtosis.ONEC,kurtosis(PredictDayONEC(Num=Individual_ID2[j])))
-  Skewness.ONEC<-append(Skewness.ONEC,skewness(PredictDayONEC(Num=Individual_ID2[j])))
-  Variance.ONEC<-append(Variance.ONEC,var(PredictDayONEC(Num=Individual_ID2[j])))
+  FocalONEC<-dfset0[dfset0$Individual.x==Individual_ID2[j],]
+  Kurtosis.ONEC<-append(Kurtosis.ONEC,kurtosis(FocalONEC$Flowers))
+  Skewness.ONEC<-append(Skewness.ONEC,skewness(FocalONEC$Flowers))
+  Variance.ONEC<-append(Variance.ONEC,var(FocalONEC$Flowers))
 }
 
 KurtosisProb.ONEC<-Kurtosis.ONEC/sum(Kurtosis.ONEC)
@@ -456,7 +414,9 @@ trait.matrix.d.ONEC<-as.matrix(Duration.norm.ONEC)
 rho.matrix.d.ONEC <- t(trait.matrix.d.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.d.ONEC
 rho.matrix.d.ONEC
 
+
 ```
+
 
 ```{r}
 ##MDDB Population
@@ -465,32 +425,64 @@ rho.matrix.d.ONEC
 ##Create table of GAM predicted # of open flowers/day/individual for just MDDB population
 MDDB<-subset(Flwr,Flwr$Pop=="MDDB")
 MDDB
+Individual_ID3<-unique(MDDB$Num)
+
+#Create MasterData
+MasterDataMDDB<-matrix(nrow=0,ncol=4)
+colnames(MasterDataMDDB)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID3)) {
+  Focal<-subset(MDDB,MDDB$Num==Individual_ID3[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID3[i],length(AbsDay))) #Individual column
+  NewDataMDDB<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataMDDB<-rbind(MasterDataMDDB,NewDataMDDB) #New data frame containing information for all individuals
+  print(Individual_ID3[i])
+}
+
 
 #PredictDay function for MDDB dataset
-PredictDayMDDB<-function(Num,days=c(0:125)){
-  Mod3<-gam(OpFlwr~s(AbsDay),data=MDDB[MDDB$Num==Num,]) #Fitting Gam model.
+PredictDayMDDB<-function(Num,days=c(0:125),df){
+  Mod3<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
   PredDay3<-predict(Mod3,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
   PredDay3[PredDay3<0]<-0 #Changing negative values to zero.
 return(PredDay3)
 }
 
-Individual_ID3<-unique(MDDB$Num)
-
-#For-loop
-Days3<-c()
-Individual3<-c()
-Flowers3<-c()
-count3=0
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count=0
 for( j in 1:length(Individual_ID3)){
-    count3=count3+1
-  Flowers3<-append(Flowers3,PredictDayMDDB(Num=Individual_ID3[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual3<-append(Individual3,rep(Individual_ID3[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days3<-append(Days3,0:125)
+    count=count+1
+  FocalFrame<-MasterDataMDDB[MasterDataMDDB$Individual==Individual_ID3[j],]
+  Flowers<-PredictDayMDDB(Num=Individual_ID3[j],df=MasterDataMDDB)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID3[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
 }
+count #Now the loop worked and you have 386 individual growth rates in total (2 did not have enough data and were removed).
+#Setting the value of Flowers to 0 where GAM was predicting past observed days of flowering.
+dfset0<-df3
 
-Mating.Matrix.Data.MDDB_Long<-data.frame(Flowers3,Individual3,Days3)
-Mating.Matrix.Data.MDDB_Wide<-Mating.Matrix.Data.MDDB_Long %>% pivot_wider(names_from = Days3,values_from = Flowers3)
-Mating.Matrix.Data.MDDB_Wide<- dplyr :: select(Mating.Matrix.Data.MDDB_Wide,-(Individual3))
+#To convert the data to wide format, the original code we tried now works (after converting the flower data)
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.MDDB_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.MDDB_Wide<-dplyr :: select(Mating.Matrix.Data.MDDB_Wide,-(Individual.x))  #Remove individual column.
 
 
 ##Mating matrix just MDDB population
@@ -527,10 +519,12 @@ Duration.MDDB<-c()
 count3=0
 Mom.MDDB<-for( j in 1:length(Individual_ID3)){
     count3=count3+1
-  Kurtosis.MDDB<-append(Kurtosis.MDDB,kurtosis(PredictDayMDDB(Num=Individual_ID3[j])))
-  Skewness.MDDB<-append(Skewness.MDDB,skewness(PredictDayMDDB(Num=Individual_ID3[j])))
-  Variance.MDDB<-append(Variance.MDDB,var(PredictDayMDDB(Num=Individual_ID3[j])))
+  FocalMDDB<-dfset0[dfset0$Individual.x==Individual_ID3[j],]
+  Kurtosis.MDDB<-append(Kurtosis.MDDB,kurtosis(FocalMDDB$Flowers))
+  Skewness.MDDB<-append(Skewness.MDDB,skewness(FocalMDDB$Flowers))
+  Variance.MDDB<-append(Variance.MDDB,var(FocalMDDB$Flowers))
 }
+
 
 #Find probabilities of each moment.
 KurtosisProb.MDDB<-Kurtosis.MDDB/sum(Kurtosis.MDDB)
@@ -655,7 +649,7 @@ dfset0<-df3
 #dfset0$Flowers[dfset0$Added0=="yes"]<-0
 
 ####
-#Different Data Formats and Visualization 
+#Different Data Formats 
 ####
 
 #To convert the data to wide format, the original code we tried now works (after converting the flower data)
@@ -671,11 +665,6 @@ flr.matrix.ONRO<-as.matrix(Mating.Matrix.Data.ONRO_Wide)
 mother.flr.matrix.ONRO<- flr.matrix.ONRO/sum(flr.matrix.ONRO)
 father.colsum.ONRO<- apply(flr.matrix.ONRO, 2,  sum)
 father.flr.matrix.ONRO<- apply(flr.matrix.ONRO, 1, function(d) d/father.colsum.ONRO) #don't understand this line
-#Get rid of NaN.
-is.nan.data.frame <- function(x)
-do.call(cbind, lapply(x, is.nan))
-father.flr.matrix.ONRO[is.nan(father.flr.matrix.ONRO)] <- 0
-
 mating.matrix.ONRO <- mother.flr.matrix.ONRO %*% father.flr.matrix.ONRO #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONRO<- sum(mating.matrix.ONRO) #should be 1
 
@@ -770,142 +759,10 @@ trait.matrix.d.ONRO<-as.matrix(Duration.norm.ONRO)
 #Rho -- Duration
 rho.matrix.d.ONRO <- t(trait.matrix.d.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.d.ONRO
 rho.matrix.d.ONRO
+
+Individual_ID4
 ```
 
-
-```{r}
-
-##Create table of GAM predicted # of open flowers/day/individual for just ONRO population
-ONRO<-subset(Flwr,Flwr$Pop=="ONRO")
-ONRO
-
-#PredictDay function for ONRO dataset
-PredictDayONRO<-function(Num,days=c(0:125)){
-  Mod4<-gam(OpFlwr~s(AbsDay),data=ONRO[ONRO$Num==Num,]) #Fitting Gam model.
-  PredDay4<-predict(Mod4,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay4[PredDay4<0]<-0 #Changing negative values to zero.
-return(PredDay4)
-}
-
-Individual_ID4<-unique(ONRO$Num) 
-
-#For-loop
-Days4<-c()
-Individual4<-c()
-Flowers4<-c()
-count4=0
-for( j in 1:length(Individual_ID4)){
-    count4=count4+1
-  Flowers4<-append(Flowers4,PredictDayONRO(Num=Individual_ID4[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual4<-append(Individual4,rep(Individual_ID4[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days4<-append(Days4,0:125)
-}
-
-Mating.Matrix.Data.ONRO_Long<-data.frame(Flowers4,Individual4,Days4)
-Mating.Matrix.Data.ONRO_Wide<-Mating.Matrix.Data.ONRO_Long %>% pivot_wider(names_from = Days4,values_from = Flowers4)
-Mating.Matrix.Data.ONRO_Wide<- dplyr :: select(Mating.Matrix.Data.ONRO_Wide,-(Individual4))
-
-##Mating matrix just ONRO population
-
-flr.matrix.ONRO<-as.matrix(Mating.Matrix.Data.ONRO_Wide)
-#Mother/Father matrices
-mother.flr.matrix.ONRO<- flr.matrix.ONRO/sum(flr.matrix.ONRO)
-father.colsum.ONRO<- apply(flr.matrix.ONRO, 2,  sum)
-father.flr.matrix.ONRO<- apply(flr.matrix.ONRO, 1, function(d) d/father.colsum.ONRO) #don't understand this line
-mating.matrix.ONRO <- mother.flr.matrix.ONRO %*% father.flr.matrix.ONRO #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
-sum.mating.matrix.ONRO<- sum(mating.matrix.ONRO) #should be 1
-
-
-##Principal component analysis for S of ONRO population
-
-prcomp(mating.matrix.ONRO,scale=FALSE)
-X4<-eigen(mating.matrix.ONRO,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
-
-##Finding S for ONRO
-Y4<-X4$values
-S.ONRO<-Y4[1]/sum(Y4)
-S.ONRO
-
-
-
-###Trait matrix and finding Rho for each trait ONRO
-#Find moments.
-Kurtosis.ONRO<-c()
-Skewness.ONRO<-c()
-Variance.ONRO<-c()
-Start.date.ONRO<-c()
-End.date.ONRO<-c()
-Duration.ONRO<-c()
-count4=0
-Mom.ONRO<-for( j in 1:length(Individual_ID4)){
-    count4=count4+1
-  Kurtosis.ONRO<-append(Kurtosis.ONRO,kurtosis(PredictDayONRO(Num=Individual_ID4[j])))
-  Skewness.ONRO<-append(Skewness.ONRO,skewness(PredictDayONRO(Num=Individual_ID4[j])))
-  Variance.ONRO<-append(Variance.ONRO,var(PredictDayONRO(Num=Individual_ID4[j])))
-}
-
-##Find probabilities of each moment.
-KurtosisProb.ONRO<-Kurtosis.ONRO/sum(Kurtosis.ONRO)
-SkewnessProb.ONRO<-Skewness.ONRO/sum(Skewness.ONRO)
-VarianceProb.ONRO<-Variance.ONRO/sum(Variance.ONRO)
-
-##Find average variance.
-mean(VarianceProb.ONRO)
-
-
-###Find start date 
-Start.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[apply(Mating.Matrix.Data.ONRO_Wide != 0, 1, which.max)])
-Start.date.ONRO
-
-###Find end date
-End.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[max.col(Mating.Matrix.Data.ONRO_Wide != 0, 'last')])
-End.date.ONRO
-
-###Find duration
-Duration.ONRO<-End.date.ONRO-Start.date.ONRO
-Duration.ONRO
-
-##Get z vector 
-Kurt.norm.ONRO<-as.vector(scale(KurtosisProb.ONRO))
-Skew.norm.ONRO<-as.vector(scale(SkewnessProb.ONRO))
-Var.norm.ONRO<-as.vector(scale(VarianceProb.ONRO))
-Start.date.norm.ONRO<-as.vector(scale(Start.date.ONRO))
-Duration.norm.ONRO<-as.vector(scale(Duration.ONRO))
-
-#Trait matrix -- Kurtosis
-trait.matrix.k.ONRO<-as.matrix(Kurt.norm.ONRO) 
-#Rho  -- Kurtosis
-rho.matrix.k.ONRO <- t(trait.matrix.k.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.k.ONRO
-rho.matrix.k.ONRO
-
-
-#Trait matrix -- Skewness
-trait.matrix.s.ONRO<-as.matrix(Skew.norm.ONRO)
-#Rho -- Skewness
-rho.matrix.s.ONRO <- t(trait.matrix.s.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.s.ONRO
-rho.matrix.s.ONRO
-
-# Trait matrix -- variance.
-trait.matrix.v.ONRO<-as.matrix(Var.norm.ONRO) 
-#Rho -- Variance
-rho.matrix.v.ONRO <- t(trait.matrix.v.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.v.ONRO
-rho.matrix.v.ONRO
-
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
-
-#Trait matrix -- Start date
-trait.matrix.st.ONRO<-as.matrix(Start.date.norm.ONRO) 
-#Rho -- Start date
-rho.matrix.st.ONRO <- t(trait.matrix.st.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.st.ONRO
-rho.matrix.st.ONRO
-
-#Trait matrix -- Duration
-trait.matrix.d.ONRO<-as.matrix(Duration.norm.ONRO)
-#Rho -- Duration
-rho.matrix.d.ONRO <- t(trait.matrix.d.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.d.ONRO
-rho.matrix.d.ONRO
-
-```
 
 ```{r}
 ##NYSC Population
@@ -915,31 +772,72 @@ rho.matrix.d.ONRO
 NYSC<-subset(Flwr,Flwr$Pop=="NYSC")
 NYSC
 
-#PredictDay function for NYSC dataset
-PredictDayNYSC<-function(Num,days=c(0:125)){
-  Mod5<-gam(OpFlwr~s(AbsDay),data=NYSC[NYSC$Num==Num,]) #Fitting Gam model.
-  PredDay5<-predict(Mod5,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay5[PredDay5<0]<-0 #Changing negative values to zero.
-return(PredDay5)
+Individual_ID5<-unique(NYSC$Num)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataNYSC<-matrix(nrow=0,ncol=4)
+colnames(MasterDataNYSC)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID5)) {
+  Focal<-subset(NYSC,NYSC$Num==Individual_ID5[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID5[i],length(AbsDay))) #Individual column
+  NewDataNYSC<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataNYSC<-rbind(MasterDataNYSC,NewDataNYSC) #New data frame containing information for all individuals
+  print(Individual_ID5[i])
 }
 
-Individual_ID5<-unique(NYSC$Num) 
+
+#PredictDay function for NYSC dataset
+PredictDayNYSC<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
 
 #For-loop
-Days5<-c()
-Individual5<-c()
-Flowers5<-c()
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+Days<-c()
+Individual<-c()
+Flowers<-c()
 count5=0
 for( j in 1:length(Individual_ID5)){
     count5=count5+1
-  Flowers5<-append(Flowers5,PredictDayNYSC(Num=Individual_ID5[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual5<-append(Individual5,rep(Individual_ID5[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days5<-append(Days5,0:125)
+  FocalFrame<-MasterDataNYSC[MasterDataNYSC$Individual==Individual_ID5[j],]
+  Flowers<-PredictDayNYSC(Num=Individual_ID5[j],df=MasterDataNYSC)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID5[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
 }
+count
+dfset0<-df3
 
-Mating.Matrix.Data.NYSC_Long<-data.frame(Flowers5,Individual5,Days5)
-Mating.Matrix.Data.NYSC_Wide<-Mating.Matrix.Data.NYSC_Long %>% pivot_wider(names_from = Days5,values_from = Flowers5)
-Mating.Matrix.Data.NYSC_Wide<- dplyr:: select(Mating.Matrix.Data.NYSC_Wide,-(Individual5))
+
+####
+#Different Data Formats 
+####
+
+#To convert the data to wide format, the original code we tried now works (after converting the flower data)
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.NYSC_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.NYSC_Wide<-dplyr :: select(Mating.Matrix.Data.NYSC_Wide,-(Individual.x))  #Remove individual column.
+
+
 
 ##Mating matrix just ONEC population
 
@@ -977,10 +875,10 @@ Duration.NYSC<-c()
 count5=0
 Mom.NYSC<-for( j in 1:length(Individual_ID5)){
     count5=count5+1
-   Kurtosis.NYSC<-append(Kurtosis.NYSC,kurtosis(PredictDayNYSC(Num=Individual_ID5[j])))
-  Skewness.NYSC<-append(Skewness.NYSC,skewness(PredictDayNYSC(Num=Individual_ID5[j])))
-  Variance.NYSC<-append(Variance.NYSC,var(PredictDayNYSC(Num=Individual_ID5[j])))
-}
+  Focal.NYSC<-dfset0[dfset0$Individual.x==Individual_ID5[j],]
+  Kurtosis.NYSC<-append(Kurtosis.NYSC,kurtosis(Focal.NYSC$Flowers))
+  Skewness.NYSC<-append(Skewness.NYSC,skewness(Focal.NYSC$Flowers))
+  Variance.NYSC<-append(Variance.NYSC,var(Focal.NYSC$Flowers))}
 
 #Find probabilities of each moment.
 KurtosisProb.NYSC<-Kurtosis.NYSC/sum(Kurtosis.NYSC)
@@ -1043,7 +941,9 @@ trait.matrix.d.NYSC<-as.matrix(Duration.norm.NYSC)
 rho.matrix.d.NYSC <- t(trait.matrix.d.NYSC) %*% mating.matrix.NYSC %*% trait.matrix.d.NYSC
 rho.matrix.d.NYSC
 
+
 ```
+
 ```{r}
 ##NYLV Population
 
@@ -1051,33 +951,67 @@ rho.matrix.d.NYSC
 ##Create table of GAM predicted # of open flowers/day/individual for just NYLV population
 NYLV<-subset(Flwr,Flwr$Pop=="NYLV")
 NYLV
-
-#PredictDay function for NYLV dataset
-PredictDayNYLV<-function(Num,days=c(0:125)){
-  Mod6<-gam(OpFlwr~s(AbsDay),data=NYLV[NYLV$Num==Num,]) #Fitting Gam model.
-  PredDay6<-predict(Mod6,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay6[PredDay6<0]<-0 #Changing negative values to zero.
-return(PredDay6)
-}
-
 Individual_ID6<-unique(NYLV$Num) 
 Individual_ID6<-Individual_ID6[Individual_ID6!=440]
 
-#For-loop
-Days6<-c()
-Individual6<-c()
-Flowers6<-c()
-count6=0
-for( j in 1:length(Individual_ID6)){
-    count6=count6+1
-  Flowers6<-append(Flowers6,PredictDayNYLV(Num=Individual_ID6[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual6<-append(Individual6,rep(Individual_ID6[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days6<-append(Days6,0:125)
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataNYLV<-matrix(nrow=0,ncol=4)
+colnames(MasterDataNYLV)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID6)) {
+  Focal<-subset(NYLV,NYLV$Num==Individual_ID6[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID6[i],length(AbsDay))) #Individual column
+  NewDataNYLV<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataNYLV<-rbind(MasterDataNYLV,NewDataNYLV) #New data frame containing information for all individuals
+  print(Individual_ID6[i])
 }
 
-Mating.Matrix.Data.NYLV_Long<-data.frame(Flowers6,Individual6,Days6)
-Mating.Matrix.Data.NYLV_Wide<-Mating.Matrix.Data.NYLV_Long %>% pivot_wider(names_from = Days6,values_from = Flowers6)
-Mating.Matrix.Data.NYLV_Wide<-dplyr:: select(Mating.Matrix.Data.NYLV_Wide,-(Individual6))
+#PredictDay function for NYLV dataset
+PredictDayNYLV<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count6=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID6)){
+    count6=count6+1
+  FocalFrame<-MasterDataNYLV[MasterDataNYLV$Individual==Individual_ID6[j],]
+  Flowers<-PredictDayNYLV(Num=Individual_ID6[j],df=MasterDataNYLV)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID6[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count6
+dfset0<-df3
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.NYLV_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.NYLV_Wide<-dplyr :: select(Mating.Matrix.Data.NYLV_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just NYLV population
 
@@ -1112,10 +1046,10 @@ Duration.NYLV<-c()
 count6=0
 Mom.NYLV<-for( j in 1:length(Individual_ID6)){
     count6=count6+1
-  Kurtosis.NYLV<-append(Kurtosis.NYLV,kurtosis(PredictDayNYLV(Num=Individual_ID6[j])))
-  Skewness.NYLV<-append(Skewness.NYLV,skewness(PredictDayNYLV(Num=Individual_ID6[j])))
-  Variance.NYLV<-append(Variance.NYLV,var(PredictDayNYLV(Num=Individual_ID6[j])))
-}
+  Focal.NYLV<-dfset0[dfset0$Individual.x==Individual_ID6[j],]
+  Kurtosis.NYLV<-append(Kurtosis.NYLV,kurtosis(Focal.NYLV$Flowers))
+  Skewness.NYLV<-append(Skewness.NYLV,skewness(Focal.NYLV$Flowers))
+  Variance.NYLV<-append(Variance.NYLV,var(Focal.NYLV$Flowers))}
 
 #Find probabilities
 KurtosisProb.NYLV<-Kurtosis.NYLV/sum(Kurtosis.NYLV)
@@ -1187,32 +1121,65 @@ rho.matrix.d.NYLV
 ##Create table of GAM predicted # of open flowers/day/individual for just ONDM population
 ONDM<-subset(Flwr,Flwr$Pop=="ONDM")
 ONDM
+Individual_ID7<-unique(ONDM$Num)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataONDM<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONDM)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID7)) {
+  Focal<-subset(ONDM,ONDM$Num==Individual_ID7[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID7[i],length(AbsDay))) #Individual column
+  NewDataONDM<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONDM<-rbind(MasterDataONDM,NewDataONDM) #New data frame containing information for all individuals
+  print(Individual_ID7[i])
+}
 
 #PredictDay function for ONDM dataset
-PredictDayONDM<-function(Num,days=c(0:125)){
-  Mod7<-gam(OpFlwr~s(AbsDay),data=ONDM[ONDM$Num==Num,]) #Fitting Gam model.
-  PredDay7<-predict(Mod7,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay7[PredDay7<0]<-0 #Changing negative values to zero.
-return(PredDay7)
+PredictDayONDM<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
 }
 
-Individual_ID7<-unique(ONDM$Num) 
 
 #For-loop
-Days7<-c()
-Individual7<-c()
-Flowers7<-c()
+Days<-c()
+Individual<-c()
+Flowers<-c()
 count7=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
 for( j in 1:length(Individual_ID7)){
     count7=count7+1
-  Flowers7<-append(Flowers7,PredictDayONDM(Num=Individual_ID7[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual7<-append(Individual7,rep(Individual_ID7[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days7<-append(Days7,0:125)
+  FocalFrame<-MasterDataONDM[MasterDataONDM$Individual==Individual_ID7[j],]
+  Flowers<-PredictDayONDM(Num=Individual_ID7[j],df=MasterDataONDM)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID7[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
 }
+count7
+dfset0<-df3
 
-Mating.Matrix.Data.ONDM_Long<-data.frame(Flowers7,Individual7,Days7)
-Mating.Matrix.Data.ONDM_Wide<-Mating.Matrix.Data.ONDM_Long %>% pivot_wider(names_from = Days7,values_from = Flowers7)
-Mating.Matrix.Data.ONDM_Wide<-dplyr :: select(Mating.Matrix.Data.ONDM_Wide,-(Individual7))
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONDM_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONDM_Wide<-dplyr :: select(Mating.Matrix.Data.ONDM_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just ONDM population
 
@@ -1247,10 +1214,11 @@ Duration.ONDM<-c()
 count7=0
 Mom.ONDM<-for( j in 1:length(Individual_ID7)){
     count7=count7+1
-  Kurtosis.ONDM<-append(Kurtosis.ONDM,kurtosis(PredictDayONDM(Num=Individual_ID7[j])))
-  Skewness.ONDM<-append(Skewness.ONDM,skewness(PredictDayONDM(Num=Individual_ID7[j])))
-  Variance.ONDM<-append(Variance.ONDM,var(PredictDayONDM(Num=Individual_ID7[j])))
-}
+  Focal.ONDM<-dfset0[dfset0$Individual.x==Individual_ID7[j],]
+  Kurtosis.ONDM<-append(Kurtosis.ONDM,kurtosis(Focal.ONDM$Flowers))
+  Skewness.ONDM<-append(Skewness.ONDM,skewness(Focal.ONDM$Flowers))
+  Variance.ONDM<-append(Variance.ONDM,var(Focal.ONDM$Flowers))}
+
 
 #Find probabilities of each moment.
 KurtosisProb.ONDM<-Kurtosis.ONDM/sum(Kurtosis.ONDM)
@@ -1306,7 +1274,6 @@ trait.matrix.d.ONDM<-as.matrix(Duration.norm.ONDM)
 #Rho -- Duration
 rho.matrix.d.ONDM <- t(trait.matrix.d.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.d.ONDM
 rho.matrix.d.ONDM
-
 ```
 
 ```{r}
@@ -1316,34 +1283,69 @@ rho.matrix.d.ONDM
 ##Create table of GAM predicted # of open flowers/day/individual for just ONTI population
 ONTI<-subset(Flwr,Flwr$Pop=="ONTI")
 ONTI
-
-#PredictDay function for ONTI dataset
-PredictDayONTI<-function(Num,days=c(0:125)){
-  Mod8<-gam(OpFlwr~s(AbsDay),data=ONTI[ONTI$Num==Num,]) #Fitting Gam model.
-  PredDay8<-predict(Mod8,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay8[PredDay8<0]<-0 #Changing negative values to zero.
-return(PredDay8)
-}
-
 Individual_ID8<-unique(ONTI$Num) 
 Individual_ID8<-Individual_ID8[Individual_ID8!=187]
 Individual_ID8<-Individual_ID8[Individual_ID8!=440]
 
-#For-loop
-Days8<-c()
-Individual8<-c()
-Flowers8<-c()
-count8=0
-for( j in 1:length(Individual_ID8)){
-    count8=count8+1
-  Flowers8<-append(Flowers8,PredictDayONTI(Num=Individual_ID8[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual8<-append(Individual8,rep(Individual_ID8[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days8<-append(Days8,0:125)
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataONTI<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONTI)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID8)) {
+  Focal<-subset(ONTI,ONTI$Num==Individual_ID8[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID8[i],length(AbsDay))) #Individual column
+  NewDataONTI<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONTI<-rbind(MasterDataONTI,NewDataONTI) #New data frame containing information for all individuals
+  print(Individual_ID8[i])
 }
 
-Mating.Matrix.Data.ONTI_Long<-data.frame(Flowers8,Individual8,Days8)
-Mating.Matrix.Data.ONTI_Wide<-Mating.Matrix.Data.ONTI_Long %>% pivot_wider(names_from = Days8,values_from = Flowers8)
-Mating.Matrix.Data.ONTI_Wide<-dplyr :: select(Mating.Matrix.Data.ONTI_Wide,-(Individual8))
+#PredictDay function for ONTI dataset
+PredictDayONTI<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count8=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID8)){
+    count8=count8+1
+  FocalFrame<-MasterDataONTI[MasterDataONTI$Individual==Individual_ID8[j],]
+  Flowers<-PredictDayONTI(Num=Individual_ID8[j],df=MasterDataONTI)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID8[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count8
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONTI_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONTI_Wide<-dplyr :: select(Mating.Matrix.Data.ONTI_Wide,-(Individual.x))  #Remove individual column.
+
 
 ##Mating matrix just ONTI population
 
@@ -1378,10 +1380,10 @@ Duration.ONTI<-c()
 count8=0
 Mom.ONTI<-for( j in 1:length(Individual_ID8)){
     count8=count8+1
-  Kurtosis.ONTI<-append(Kurtosis.ONTI,kurtosis(PredictDayONTI(Num=Individual_ID8[j])))
-  Skewness.ONTI<-append(Skewness.ONTI,skewness(PredictDayONTI(Num=Individual_ID8[j])))
-  Variance.ONTI<-append(Variance.ONTI,var(PredictDayONTI(Num=Individual_ID8[j])))
-}
+  Focal.ONTI<-dfset0[dfset0$Individual.x==Individual_ID8[j],]
+  Kurtosis.ONTI<-append(Kurtosis.ONTI,kurtosis(Focal.ONTI$Flowers))
+  Skewness.ONTI<-append(Skewness.ONTI,skewness(Focal.ONTI$Flowers))
+  Variance.ONTI<-append(Variance.ONTI,var(Focal.ONTI$Flowers))}
 
 #Find probabilities of moments.
 KurtosisProb.ONTI<-Kurtosis.ONTI/sum(Kurtosis.ONTI)
@@ -1446,32 +1448,65 @@ rho.matrix.d.ONTI
 ##Create table of GAM predicted # of open flowers/day/individual for just ONWH population
 ONWH<-subset(Flwr,Flwr$Pop=="ONWH")
 ONWH
-
-#PredictDay function for ONWH dataset
-PredictDayONWH<-function(Num,days=c(0:125)){
-  Mod9<-gam(OpFlwr~s(AbsDay),data=ONWH[ONWH$Num==Num,]) #Fitting Gam model.
-  PredDay9<-predict(Mod9,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay9[PredDay9<0]<-0 #Changing negative values to zero.
-return(PredDay9)
-}
-
 Individual_ID9<-unique(ONWH$Num) 
 
-#For-loop
-Days9<-c()
-Individual9<-c()
-Flowers9<-c()
-count9=0
-for( j in 1:length(Individual_ID9)){
-    count9=count9+1
-  Flowers9<-append(Flowers9,PredictDayONWH(Num=Individual_ID9[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual9<-append(Individual9,rep(Individual_ID9[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days9<-append(Days9,0:125)
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataONWH<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONWH)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID9)) {
+  Focal<-subset(ONWH,ONWH$Num==Individual_ID9[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID9[i],length(AbsDay))) #Individual column
+  NewDataONWH<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONWH<-rbind(MasterDataONWH,NewDataONWH) #New data frame containing information for all individuals
+  print(Individual_ID9[i])
 }
 
-Mating.Matrix.Data.ONWH_Long<-data.frame(Flowers9,Individual9,Days9)
-Mating.Matrix.Data.ONWH_Wide<-Mating.Matrix.Data.ONWH_Long %>% pivot_wider(names_from = Days9,values_from = Flowers9)
-Mating.Matrix.Data.ONWH_Wide<-dplyr :: select(Mating.Matrix.Data.ONWH_Wide,-(Individual9))
+#PredictDay function for ONWH dataset
+PredictDayONWH<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count9=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID9)){
+    count9=count9+1
+  FocalFrame<-MasterDataONWH[MasterDataONWH$Individual==Individual_ID9[j],]
+  Flowers<-PredictDayONWH(Num=Individual_ID9[j],df=MasterDataONWH)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID9[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count9
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONWH_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONWH_Wide<-dplyr :: select(Mating.Matrix.Data.ONWH_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just ONWH population
 
@@ -1507,10 +1542,10 @@ Duration.ONWH<-c()
 count9=0
 Mom.ONWH<-for( j in 1:length(Individual_ID9)){
     count9=count9+1
-  Kurtosis.ONWH<-append(Kurtosis.ONWH,kurtosis(PredictDayONWH(Num=Individual_ID9[j])))
-  Skewness.ONWH<-append(Skewness.ONWH,skewness(PredictDayONWH(Num=Individual_ID9[j])))
-  Variance.ONWH<-append(Variance.ONWH,var(PredictDayONWH(Num=Individual_ID9[j])))
-}
+  Focal.ONWH<-dfset0[dfset0$Individual.x==Individual_ID9[j],]
+  Kurtosis.ONWH<-append(Kurtosis.ONWH,kurtosis(Focal.ONWH$Flowers))
+  Skewness.ONWH<-append(Skewness.ONWH,skewness(Focal.ONWH$Flowers))
+  Variance.ONWH<-append(Variance.ONWH,var(Focal.ONWH$Flowers))}
 
 #Find probabilities of moments.
 KurtosisProb.ONWH<-Kurtosis.ONWH/sum(Kurtosis.ONWH)
@@ -1574,33 +1609,66 @@ rho.matrix.d.ONWH
 ##Create table of GAM predicted # of open flowers/day/individual for just NJHP population
 NJHP<-subset(Flwr,Flwr$Pop=="NJHP")
 NJHP
-
-#PredictDay function for NJHP dataset
-PredictDayNJHP<-function(Num,days=c(0:125)){
-  Mod10<-gam(OpFlwr~s(AbsDay),data=NJHP[NJHP$Num==Num,]) #Fitting Gam model.
-  PredDay10<-predict(Mod10,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay10[PredDay10<0]<-0 #Changing negative values to zero.
-return(PredDay10)
-}
-
 Individual_ID10<-unique(NJHP$Num) 
 
-#For-loop
-Days10<-c()
-Individual10<-c()
-Flowers10<-c()
-count10=0
-for( j in 1:length(Individual_ID10)){
-    count10=count10+1
-  Flowers10<-append(Flowers10,PredictDayNJHP(Num=Individual_ID10[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual10<-append(Individual10,rep(Individual_ID10[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days10<-append(Days10,0:125)
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataNJHP<-matrix(nrow=0,ncol=4)
+colnames(MasterDataNJHP)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID10)) {
+  Focal<-subset(NJHP,NJHP$Num==Individual_ID10[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID10[i],length(AbsDay))) #Individual column
+  NewDataNJHP<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataNJHP<-rbind(MasterDataNJHP,NewDataNJHP) #New data frame containing information for all individuals
+  print(Individual_ID10[i])
+}
+
+#PredictDay function for NJHP dataset
+PredictDayNJHP<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
 }
 
 
-Mating.Matrix.Data.NJHP_Long<-data.frame(Flowers10,Individual10,Days10)
-Mating.Matrix.Data.NJHP_Wide<-Mating.Matrix.Data.NJHP_Long %>% pivot_wider(names_from = Days10,values_from = Flowers10)
-Mating.Matrix.Data.NJHP_Wide<-dplyr :: select(Mating.Matrix.Data.NJHP_Wide,-(Individual10)) #dyplr package included in command line to troubleshoot an error message.
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count10=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID10)){
+    count10=count10+1
+  FocalFrame<-MasterDataNJHP[MasterDataNJHP$Individual==Individual_ID10[j],]
+  Flowers<-PredictDayNJHP(Num=Individual_ID10[j],df=MasterDataNJHP)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID10[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count10
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.NJHP_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.NJHP_Wide<-dplyr :: select(Mating.Matrix.Data.NJHP_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just NJHP population
 
@@ -1636,10 +1704,10 @@ Duration.NJHP<-c()
 count10=0
 Mom.NJHP<-for( j in 1:length(Individual_ID10)){
     count10=count10+1
-  Kurtosis.NJHP<-append(Kurtosis.NJHP,kurtosis(PredictDayNJHP(Num=Individual_ID10[j])))
-  Skewness.NJHP<-append(Skewness.NJHP,skewness(PredictDayNJHP(Num=Individual_ID10[j])))
-  Variance.NJHP<-append(Variance.NJHP,var(PredictDayNJHP(Num=Individual_ID10[j])))
-}
+  Focal.NJHP<-dfset0[dfset0$Individual.x==Individual_ID10[j],]
+  Kurtosis.NJHP<-append(Kurtosis.NJHP,kurtosis(Focal.NJHP$Flowers))
+  Skewness.NJHP<-append(Skewness.NJHP,skewness(Focal.NJHP$Flowers))
+  Variance.NJHP<-append(Variance.NJHP,var(Focal.NJHP$Flowers))}
 
 #Find probabilities of each moment.
 KurtosisProb.NJHP<-Kurtosis.NJHP/sum(Kurtosis.NJHP)
@@ -1705,33 +1773,69 @@ rho.matrix.d.NJHP
 ##Create table of GAM predicted # of open flowers/day/individual for just ONNO population
 ONNO<-subset(Flwr,Flwr$Pop=="ONNO")
 ONNO
-
-#PredictDay function for ONNO dataset
-PredictDayONNO<-function(Num,days=c(0:125)){
-  Mod11<-gam(OpFlwr~s(AbsDay),data=ONNO[ONNO$Num==Num,]) #Fitting Gam model.
-  PredDay11<-predict(Mod11,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay11[PredDay11<0]<-0 #Changing negative values to zero.
-return(PredDay11)
-}
-
 Individual_ID11<-unique(ONNO$Num) 
 
-#For-loop
-Days11<-c()
-Individual11<-c()
-Flowers11<-c()
-count11=0
-for( j in 1:length(Individual_ID11)){
-    count11=count11+1
-  Flowers11<-append(Flowers11,PredictDayONNO(Num=Individual_ID11[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual11<-append(Individual11,rep(Individual_ID11[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days11<-append(Days11,0:125)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataONNO<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONNO)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID11)) {
+  Focal<-subset(ONNO,ONNO$Num==Individual_ID11[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID11[i],length(AbsDay))) #Individual column
+  NewDataONNO<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONNO<-rbind(MasterDataONNO,NewDataONNO) #New data frame containing information for all individuals
+  print(Individual_ID11[i])
 }
 
 
-Mating.Matrix.Data.ONNO_Long<-data.frame(Flowers11,Individual11,Days11)
-Mating.Matrix.Data.ONNO_Wide<-Mating.Matrix.Data.ONNO_Long %>% pivot_wider(names_from = Days11,values_from = Flowers11)
-Mating.Matrix.Data.ONNO_Wide<-dplyr :: select(Mating.Matrix.Data.ONNO_Wide,-(Individual11)) #dplyr package included in command line to troubleshoot an error message.
+
+#PredictDay function for ONNO dataset
+PredictDayONNO<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count11=0
+#For-loop
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID11)){
+    count11=count11+1
+  FocalFrame<-MasterDataONNO[MasterDataONNO$Individual==Individual_ID11[j],]
+  Flowers<-PredictDayONNO(Num=Individual_ID11[j],df=MasterDataONNO)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID11[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count11
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONNO_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONNO_Wide<-dplyr :: select(Mating.Matrix.Data.ONNO_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just ONNO population
 
@@ -1767,10 +1871,10 @@ Duration.ONNO<-c()
 count11=0
 Mom.ONNO<-for( j in 1:length(Individual_ID11)){
     count11=count11+1
-  Kurtosis.ONNO<-append(Kurtosis.ONNO,kurtosis(PredictDayONNO(Num=Individual_ID11[j])))
-  Skewness.ONNO<-append(Skewness.ONNO,skewness(PredictDayONNO(Num=Individual_ID11[j])))
-  Variance.ONNO<-append(Variance.ONNO,var(PredictDayONNO(Num=Individual_ID11[j])))
-}
+  Focal.ONNO<-dfset0[dfset0$Individual.x==Individual_ID11[j],]
+  Kurtosis.ONNO<-append(Kurtosis.ONNO,kurtosis(Focal.ONNO$Flowers))
+  Skewness.ONNO<-append(Skewness.ONNO,skewness(Focal.ONNO$Flowers))
+  Variance.ONNO<-append(Variance.ONNO,var(Focal.ONNO$Flowers))}
 
 #Find probabilities of each moment.
 KurtosisProb.ONNO<-Kurtosis.ONNO/sum(Kurtosis.ONNO)
@@ -1836,34 +1940,67 @@ rho.matrix.d.ONNO
 ##Create table of GAM predicted # of open flowers/day/individual for just NYCH population
 NYCH<-subset(Flwr,Flwr$Pop=="NYCH")
 NYCH
-
-#PredictDay function for NYCH dataset
-PredictDayNYCH<-function(Num,days=c(0:125)){
-  Mod12<-gam(OpFlwr~s(AbsDay),data=NYCH[NYCH$Num==Num,]) #Fitting Gam model.
-  PredDay12<-predict(Mod12,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay12[PredDay12<0]<-0 #Changing negative values to zero.
-return(PredDay12)
-}
-
 Individual_ID12<-unique(NYCH$Num) 
 Individual_ID12<-Individual_ID12[Individual_ID12!=187]
 
-#For-loop
-Days12<-c()
-Individual12<-c()
-Flowers12<-c()
-count12=0
-for( j in 1:length(Individual_ID12)){
-    count12=count12+1
-  Flowers12<-append(Flowers12,PredictDayNYCH(Num=Individual_ID12[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual12<-append(Individual12,rep(Individual_ID12[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days12<-append(Days12,0:125)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataNYCH<-matrix(nrow=0,ncol=4)
+colnames(MasterDataNYCH)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID12)) {
+  Focal<-subset(NYCH,NYCH$Num==Individual_ID12[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID12[i],length(AbsDay))) #Individual column
+  NewDataNYCH<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataNYCH<-rbind(MasterDataNYCH,NewDataNYCH) #New data frame containing information for all individuals
+  print(Individual_ID12[i])
+}
+
+#PredictDay function for NYCH dataset
+PredictDayNYCH<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
 }
 
 
-Mating.Matrix.Data.NYCH_Long<-data.frame(Flowers12,Individual12,Days12)
-Mating.Matrix.Data.NYCH_Wide<-Mating.Matrix.Data.NYCH_Long %>% pivot_wider(names_from = Days12,values_from = Flowers12)
-Mating.Matrix.Data.NYCH_Wide<-dplyr :: select(Mating.Matrix.Data.NYCH_Wide,-(Individual12)) #dplyr package included in command line to troubleshoot an error message.
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count12=0
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID12)){
+    count12=count12+1
+  FocalFrame<-MasterDataNYCH[MasterDataNYCH$Individual==Individual_ID12[j],]
+  Flowers<-PredictDayNYCH(Num=Individual_ID12[j],df=MasterDataNYCH)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID12[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count12
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.NYCH_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.NYCH_Wide<-dplyr :: select(Mating.Matrix.Data.NYCH_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just NYCH population
 
@@ -1899,10 +2036,10 @@ Duration.NYCH<-c()
 count12=0
 Mom.NYCH<-for( j in 1:length(Individual_ID12)){
     count12=count12+1
-  Kurtosis.NYCH<-append(Kurtosis.NYCH,kurtosis(PredictDayNYCH(Num=Individual_ID12[j])))
-  Skewness.NYCH<-append(Skewness.NYCH,skewness(PredictDayNYCH(Num=Individual_ID12[j])))
-  Variance.NYCH<-append(Variance.NYCH,var(PredictDayNYCH(Num=Individual_ID12[j])))
-}
+  Focal.NYCH<-dfset0[dfset0$Individual.x==Individual_ID12[j],]
+  Kurtosis.NYCH<-append(Kurtosis.NYCH,kurtosis(Focal.NYCH$Flowers))
+  Skewness.NYCH<-append(Skewness.NYCH,skewness(Focal.NYCH$Flowers))
+  Variance.NYCH<-append(Variance.NYCH,var(Focal.NYCH$Flowers))}
 
 #Find probabilities of moments.
 KurtosisProb.NYCH<-Kurtosis.NYCH/sum(Kurtosis.NYCH)
@@ -1966,33 +2103,70 @@ rho.matrix.d.NYCH
 ##Create table of GAM predicted # of open flowers/day/individual for just ONPG population
 ONPG<-subset(Flwr,Flwr$Pop=="ONPG")
 ONPG
-
-#PredictDay function for ONPG dataset
-PredictDayONPG<-function(Num,days=c(0:125)){
-  Mod13<-gam(OpFlwr~s(AbsDay),data=ONPG[ONPG$Num==Num,]) #Fitting Gam model.
-  PredDay13<-predict(Mod13,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay13[PredDay13<0]<-0 #Changing negative values to zero.
-return(PredDay13)
-}
-
 Individual_ID13<-unique(ONPG$Num) 
 
-#For-loop
-Days13<-c()
-Individual13<-c()
-Flowers13<-c()
-count13=0
-for( j in 1:length(Individual_ID13)){
-    count13=count13+1
-  Flowers13<-append(Flowers13,PredictDayONPG(Num=Individual_ID13[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual13<-append(Individual13,rep(Individual_ID13[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days13<-append(Days13,0:125)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataONPG<-matrix(nrow=0,ncol=4)
+colnames(MasterDataONPG)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID13)) {
+  Focal<-subset(ONPG,ONPG$Num==Individual_ID13[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID13[i],length(AbsDay))) #Individual column
+  NewDataONPG<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataONPG<-rbind(MasterDataONPG,NewDataONPG) #New data frame containing information for all individuals
+  print(Individual_ID13[i])
 }
 
 
-Mating.Matrix.Data.ONPG_Long<-data.frame(Flowers13,Individual13,Days13)
-Mating.Matrix.Data.ONPG_Wide<-Mating.Matrix.Data.ONPG_Long %>% pivot_wider(names_from = Days13,values_from = Flowers13)
-Mating.Matrix.Data.ONPG_Wide<-dplyr :: select(Mating.Matrix.Data.ONPG_Wide,-(Individual13)) #dplyr package included in command line to troubleshoot an error message.
+
+#PredictDay function for ONPG dataset
+PredictDayONPG<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
+}
+
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count13=0
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID13)){
+    count13=count13+1
+  FocalFrame<-MasterDataONPG[MasterDataONPG$Individual==Individual_ID13[j],]
+  Flowers<-PredictDayONPG(Num=Individual_ID13[j],df=MasterDataONPG)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID13[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count13
+dfset0<-df3
+
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.ONPG_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.ONPG_Wide<-dplyr :: select(Mating.Matrix.Data.ONPG_Wide,-(Individual.x))  #Remove individual column.
+
 
 ##Mating matrix just ONPG population
 
@@ -2028,10 +2202,10 @@ Duration.ONPG<-c()
 count13=0
 Mom.ONPG<-for( j in 1:length(Individual_ID13)){
     count13=count13+1
-  Kurtosis.ONPG<-append(Kurtosis.ONPG,kurtosis(PredictDayONPG(Num=Individual_ID13[j])))
-  Skewness.ONPG<-append(Skewness.ONPG,skewness(PredictDayONPG(Num=Individual_ID13[j])))
-  Variance.ONPG<-append(Variance.ONPG,var(PredictDayONPG(Num=Individual_ID13[j])))
-}
+  Focal.ONPG<-dfset0[dfset0$Individual.x==Individual_ID13[j],]
+  Kurtosis.ONPG<-append(Kurtosis.ONPG,kurtosis(Focal.ONPG$Flowers))
+  Skewness.ONPG<-append(Skewness.ONPG,skewness(Focal.ONPG$Flowers))
+  Variance.ONPG<-append(Variance.ONPG,var(Focal.ONPG$Flowers))}
 
 #Find probabilities of moments.
 KurtosisProb.ONPG<-Kurtosis.ONPG/sum(Kurtosis.ONPG)
@@ -2096,33 +2270,67 @@ rho.matrix.d.ONPG
 ##Create table of GAM predicted # of open flowers/day/individual for just NJPT population
 NJPT<-subset(Flwr,Flwr$Pop=="NJPT")
 NJPT
-
-#PredictDay function for NJPT dataset
-PredictDayNJPT<-function(Num,days=c(0:125)){
-  Mod14<-gam(OpFlwr~s(AbsDay),data=NJPT[NJPT$Num==Num,]) #Fitting Gam model.
-  PredDay14<-predict(Mod14,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay14[PredDay14<0]<-0 #Changing negative values to zero.
-return(PredDay14)
-}
-
 Individual_ID14<-unique(NJPT$Num) 
 
-#For-loop
-Days14<-c()
-Individual14<-c()
-Flowers14<-c()
-count14=0
-for( j in 1:length(Individual_ID14)){
-    count14=count14+1
-  Flowers14<-append(Flowers14,PredictDayNJPT(Num=Individual_ID14[j]))#Here use j to subset each individual in the individual ID vector. 
-  Individual14<-append(Individual14,rep(Individual_ID14[j], times=length(0:125))) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
-  Days14<-append(Days14,0:125)
+
+##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
+MasterDataNJPT<-matrix(nrow=0,ncol=4)
+colnames(MasterDataNJPT)<-c("AbsDay","OpFlwr","Individual","Added0")
+for (i in 1:length(Individual_ID14)) {
+  Focal<-subset(NJPT,NJPT$Num==Individual_ID14[i])
+  Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
+  End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
+    if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    AbsDay<-c(0:Start,Focal$AbsDay)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
+  } 
+  else {
+    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    AbsDay<-c(0:Start,Focal$AbsDay,End:125)
+    Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
+  }
+  Individual<-c(rep(Individual_ID14[i],length(AbsDay))) #Individual column
+  NewDataNJPT<-data.frame(AbsDay,OpFlwr,Individual,Added0) #New data frame for each individual
+  MasterDataNJPT<-rbind(MasterDataNJPT,NewDataNJPT) #New data frame containing information for all individuals
+  print(Individual_ID14[i])
+}
+
+#PredictDay function for NJPT dataset
+PredictDayNJPT<-function(Num,days=c(0:125),df){
+  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+return(PredDay)
 }
 
 
-Mating.Matrix.Data.NJPT_Long<-data.frame(Flowers14,Individual14,Days14)
-Mating.Matrix.Data.NJPT_Wide<-Mating.Matrix.Data.NJPT_Long %>% pivot_wider(names_from = Days14,values_from = Flowers14)
-Mating.Matrix.Data.NJPT_Wide<-dplyr :: select(Mating.Matrix.Data.NJPT_Wide,-(Individual14)) #dplyr package included in command line to troubleshoot an error message.
+
+#For-loop
+Days<-c()
+Individual<-c()
+Flowers<-c()
+count14=0
+df3<-matrix(ncol=6,nrow=0)
+colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
+for( j in 1:length(Individual_ID14)){
+    count14=count14+1
+  FocalFrame<-MasterDataNJPT[MasterDataNJPT$Individual==Individual_ID14[j],]
+  Flowers<-PredictDayNJPT(Num=Individual_ID14[j],df=MasterDataNJPT)#Here use j to subset each individual in the individual ID vector. 
+  Individual<-rep(Individual_ID14[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
+  Days<-0:125
+  df1<-data.frame(Flowers,Individual,Days)
+  df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
+  df3<-rbind(df3,df2)
+}
+count14
+dfset0<-df3
+
+
+#Convert the data to wide format
+dfset0<-dplyr :: select(dfset0,Flowers,Individual.x,Days,-(OpFlwr:Added0)) #Remove unnecessary columns.
+Mating.Matrix.Data.NJPT_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
+Mating.Matrix.Data.NJPT_Wide<-dplyr :: select(Mating.Matrix.Data.NJPT_Wide,-(Individual.x))  #Remove individual column.
 
 ##Mating matrix just NJPT population
 
@@ -2158,10 +2366,10 @@ Duration.NJPT<-c()
 count14=0
 Mom.NJPT<-for( j in 1:length(Individual_ID14)){
     count14=count14+1
-  Kurtosis.NJPT<-append(Kurtosis.NJPT,kurtosis(PredictDayNJPT(Num=Individual_ID14[j])))
-  Skewness.NJPT<-append(Skewness.NJPT,skewness(PredictDayNJPT(Num=Individual_ID14[j])))
-  Variance.NJPT<-append(Variance.NJPT,var(PredictDayNJPT(Num=Individual_ID14[j])))
-}
+  Focal.NJPT<-dfset0[dfset0$Individual.x==Individual_ID14[j],]
+  Kurtosis.NJPT<-append(Kurtosis.NJPT,kurtosis(Focal.NJPT$Flowers))
+  Skewness.NJPT<-append(Skewness.NJPT,skewness(Focal.NJPT$Flowers))
+  Variance.NJPT<-append(Variance.NJPT,var(Focal.NJPT$Flowers))}
 
 #Find probabilities of moments. 
 KurtosisProb.NJPT<-Kurtosis.NJPT/sum(Kurtosis.NJPT)
