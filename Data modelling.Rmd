@@ -55,6 +55,12 @@ SPointReg2<-p +
   geom_point(data=Results,mapping=aes(x=Latitude,y=S.Value)) + geom_abline(intercept=0.35199,slope=0.00996,colour="red") + geom_abline(intercept=0.67726,slope=0,colour="blue")
 SPointReg2
 
+##Make graph poster-worthy
+"Regression Line"<-"red"
+"Whole Sample S Value"<-"blue"
+SPointReg2<-p +
+  geom_point(data=Results,mapping=aes(x=Latitude,y=S.Value)) + geom_abline(aes(intercept=0.35199,slope=0.00996,color="Regression Line")) + geom_abline(aes(intercept=0.67726,slope=0,color="Whole Sample S Value")) + labs(x="Latitude",y="S Value",color="Legend",title="Population S Values by Latitude") + scale_color_manual(values=c("Regression Line"="red","Whole Sample S Value"="blue"),labels=c("Regression Line","Whole Sample S Value"))
+?labs
 ## Point graph of Population code x S value (population codes arranged in order of descending latitude)
 SPointPop<-d +
   geom_point(data=Results,mapping=aes(x=Population,y=S.Value)) + geom_point(data=Results[Results$Population=="Whole.Sample",],mapping=aes(x=Population, y=S.Value), colour="red") ##Population codes are in order of descending latitude, and this graph includes the whole population.
@@ -127,6 +133,10 @@ reg3
 KurtPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Kurtosis)) + geom_abline(intercept=-0.28898,slope=0.00836,colour="red")
 KurtPointLat
 
+#Create poster-worthy graph.
+color<-("Regression Line" = "red")
+KurtPointLat2<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Kurtosis)) + geom_abline(aes(intercept=-0.28898,slope=0.00836,color="Regression Line")) + labs(x="Latitude",y="Rho Value",color="Legend",title="Population Rho Values for Kurtosis of Flowering Schedule, by Latitude") + scale_color_manual(values=c("Regression Line" = "red"),labels="Regression Line") 
+KurtPointLat2
 
 ##Rho for kurtosis by population code (includes whole sample)
 Results[Results$Population=="Whole.Sample",]
@@ -135,8 +145,9 @@ KurtPointPop
 
 ##Average kurtosis x latitude.
 AvgKurtSmooth<-p +
-  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.Kurtosis))
+  geom_smooth(method='lm',data=Results,mapping=aes(x=Latitude,y=Mean.Kurtosis)) + labs(y="Mean Kurtosis",title="Population Mean Kurtosis by Latitude")
 AvgKurtSmooth
+
 ```
 
 
@@ -188,7 +199,25 @@ DurPointLat
 ```
 
 ```{r}
+### Poster Visuals ###
 
+##Rho for kurtosis by latitude
+KurtPointLat2<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Kurtosis)) + geom_abline(aes(intercept=-0.28898,slope=0.00836,color="red")) + labs(x="Latitude",y="Rho Value",title="Rho Values for Kurtosis of Flowering Schedule by Latitude") + theme(legend.position="none",plot.title = element_text(size=11))
+KurtPointLat2
 
+##Rho for skewness by latitude
+SkewPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Skewness)) + geom_abline(intercept=-0.16458,slope=0.00544,colour="red") + labs(y="Rho Value",title="Rho Values for Skewness of Flowering Schedule by Latitude") + theme(plot.title=element_text(size=11))
+SkewPointLat
+
+##Rho for duration by latitude
+DurPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.Duration)) + geom_abline(intercept=-0.09373,slope=0.00445,colour="red")+ labs(y="Rho Value",title="Rho Values for Duration of Flowering Schedule by Latitude") + theme(plot.title=element_text(size=11))
+DurPointLat
+
+##Rho for start date by latitude
+SDPointLat<-p + geom_point(data=Results,mapping=aes(x=Latitude,y=Rho.SD)) + geom_abline(intercept=0.08555,slope=0.00105,colour="red")+ labs(y="Rho Value",title="Rho Values for Start Date of Flowering Schedule by Latitude")+ theme(plot.title=element_text(size=11))
+SDPointLat
+
+library(gridExtra)
+grid.arrange(KurtPointLat2,SkewPointLat,DurPointLat,SDPointLat,nrow=2,ncol=2)
 
 ```
