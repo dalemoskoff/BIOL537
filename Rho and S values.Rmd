@@ -31,6 +31,7 @@ Flwr$AbsDay<-Flwr$RelDay+Flwr$Start # Add absolute day
 Flwr$CumFlwr<-ave(Flwr$OpFlwr,Flwr$Num,FUN=cumsum) # Calculate cumulative N flowers
 
 ```
+
 ```{r}
 ####
 #GAM troubleshooting
@@ -133,17 +134,17 @@ dfset0<-df3
 ####
 
 #To convert the data to wide format, the original code we tried now works (after converting the flower data)
-dfset0<-dplyr :: select(dfset0,-(Individual.y:Added0)) #Remove unnecessary columns.
+dfset0<-dplyr :: select(dfset0,-(Individual.y:Added0),-OpFlwr) #Remove unnecessary columns.
 Mating.Matrix.Data_Wide<-dfset0 %>% pivot_wider(names_from = Days,values_from = Flowers) #Convert to wide format. 
 Mating.Matrix.Data_Wide<-dplyr :: select(Mating.Matrix.Data_Wide,-(Individual.x))  #Remove individual column.
 
 
 ##Modelling for poster##
 library(gridExtra)
-Gam<-ggplot(dfset0[dfset0$Individual.x=="3",])+
+Gam<-ggplot(dfset0[dfset0$Individual.x=="482",])+
   geom_line(aes(x=Days,y=Flowers,colour="red")) +
   theme_classic() + ylab("Open Flowers") + ggtitle("Linear Imputation Model") + theme(legend.position="none")  #google colour brewer 
-Raw<-ggplot(MasterData[MasterData$Individual=="3",]) +
+Raw<-ggplot(MasterData[MasterData$Individual=="482",]) +
   geom_point(aes(x=AbsDay,y=OpFlwr)) + xlab("Days") + ylab("Open Flowers") + ggtitle("Raw Data")+
   theme_classic() 
 
@@ -184,6 +185,27 @@ sum.mating.matrix<- sum(mating.matrix) #should be 1
 ```{r}
 #Trait matrix and finding Rho for each trait
 
+#Mom<-for( j in 1:length(Individual_ID)){
+    #count=count+1
+  #Kurtosis<-append(Kurtosis,kurtosis(PredictDay(Num=Individual_ID[j])))
+  #Skewness<-append(Skewness,skewness(PredictDay(Num=Individual_ID[j])))
+  #Variance<-append(Variance,var(PredictDay(Num=Individual_ID[j])))
+#} 
+#Focal<-df3[df3$Individual.x==Individual_ID[10],]
+#  pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE)
+#  WeightDays<-Focal$Days*pDays
+# Mean<-sum(WeightDays,na.rm=TRUE)
+#  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+#  CoeffVar<-Var/(Mean)
+#  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+#  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+#  Kurtosis<-append(Kurtosis,CoeffKurt)
+#  Skewness<-append(Skewness,CoeffSkew)
+#  Variance<-append(Variance,CoeffVar)
+  #Focal$Days[max(Focal$OpFlwr,na.rm=TRUE)]
+  #max(Focal$OpFlwr,na.rm=TRUE)
+
+
 #Find moments.
 Kurtosis<-c()
 Skewness<-c()
@@ -191,40 +213,48 @@ Variance<-c()
 Start.date<-c()
 End.date<-c()
 Duration<-c()
-#Mom<-for( j in 1:length(Individual_ID)){
-    #count=count+1
-  #Kurtosis<-append(Kurtosis,kurtosis(PredictDay(Num=Individual_ID[j])))
-  #Skewness<-append(Skewness,skewness(PredictDay(Num=Individual_ID[j])))
-  #Variance<-append(Variance,var(PredictDay(Num=Individual_ID[j])))
-#} 
-
+Peak<-c()
 ##New moments for-loop with new dataset. 
 Mom<-for( j in 1:length(Individual_ID)){
     count=count+1
-  Focal<-dfset0[dfset0$Individual.x==Individual_ID[j],]
-  Kurtosis<-append(Kurtosis,kurtosis(Focal$Flowers))
-  Skewness<-append(Skewness,skewness(Focal$Flowers))
-  Variance<-append(Variance,var(Focal$Flowers))
+  Focal<-df3[df3$Individual.x==Individual_ID[j],]
+  pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE)
+  WeightDays<-Focal$Days*pDays
+  Mean<-sum(WeightDays,na.rm=TRUE)
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis<-append(Kurtosis,CoeffKurt)
+  Skewness<-append(Skewness,CoeffSkew)
+  Variance<-append(Variance,CoeffVar)
+  Start.date<-append(Start.date,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date<-append(End.date,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
 } 
+
+Kurtosis[is.nan(Kurtosis)]<-0
+Skewness[is.nan(Skewness)]<-0
+Variance[is.nan(Variance)]<-0
 
 ```
 
 ```{r}
 
 ##Find probabilities of each moment.
-KurtosisProb<-Kurtosis/sum(Kurtosis)
-SkewnessProb<-Skewness/sum(Skewness)
-VarianceProb<-Variance/sum(Variance)
+#KurtosisProb<-Kurtosis/sum(Kurtosis)
+#SkewnessProb<-Skewness/sum(Skewness)
+#VarianceProb<-Variance/sum(Variance)
 
 ##Find mean variance
-mean(VarianceProb)
+mean(Variance)
 
 
 ###Find start date 
-Start.date<-as.numeric(names(Mating.Matrix.Data_Wide)[apply(Mating.Matrix.Data_Wide != 0, 1, which.max)])
+#Start.date<-as.numeric(names(Mating.Matrix.Data_Wide)[apply(Mating.Matrix.Data_Wide != 0, 1, which.max)]) # LI models
 
 ###Find end date
-End.date<-as.numeric(names(Mating.Matrix.Data_Wide)[max.col(Mating.Matrix.Data_Wide != 0, 'last')])
+#End.date<-as.numeric(names(Mating.Matrix.Data_Wide)[max.col(Mating.Matrix.Data_Wide != 0, 'last')]) # LI models
+
 
 
 ###Find duration
@@ -232,9 +262,9 @@ Duration<-End.date-Start.date
 
 
 ##Convert to z vector 
-Kurt.norm<-as.vector(scale(KurtosisProb))
-Skew.norm<-as.vector(scale(SkewnessProb))
-Var.norm<-as.vector(scale(VarianceProb))
+Kurt.norm<-as.vector(scale(Kurtosis))
+Skew.norm<-as.vector(scale(Skewness))
+Var.norm<-as.vector(scale(Variance))
 Start.date.norm<-as.vector(scale(Start.date))
 Duration.norm<-as.vector(scale(Duration))
 
@@ -330,12 +360,12 @@ for (i in 1:length(Individual_ID2)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep NA for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep NA for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep NA
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -371,8 +401,8 @@ for( j in 1:length(Individual_ID2)){
   df2<-df1 %>% left_join(FocalFrame,by=c("Days"="AbsDay")) #Joining new data frame (with GAM predictions) with raw data frame.
   df3<-rbind(df3,df2)
 }
-count #Now the loop worked and you have 386 individual growth rates in total (2 did not have enough data and were removed).
-#Setting the value of Flowers to 0 where GAM was predicting past observed days of flowering.
+count 
+
 dfset0<-df3
 
 #To convert the data to wide format, the original code we tried now works (after converting the flower data)
@@ -412,29 +442,40 @@ Variance.ONEC<-c()
 Start.date.ONEC<-c()
 End.date.ONEC<-c()
 Duration.ONEC<-c()
-PC1.ONEC<-c()
 count2=0
 Mom.ONEC<-for( j in 1:length(Individual_ID2)){
     count2=count2+1
-  FocalONEC<-dfset0[dfset0$Individual.x==Individual_ID2[j],]
-  Kurtosis.ONEC<-append(Kurtosis.ONEC,kurtosis(FocalONEC$Flowers))
-  Skewness.ONEC<-append(Skewness.ONEC,skewness(FocalONEC$Flowers))
-  Variance.ONEC<-append(Variance.ONEC,var(FocalONEC$Flowers))
-  PC1.ONEC<-append(PC1.ONEC,PC1$PC1[PC1$Num==Individual_ID2[j]])
-}
+  Focal<-df3[df3$Individual.x==Individual_ID2[j],]
+  pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE)
+  WeightDays<-Focal$Days*pDays
+  Mean<-sum(WeightDays,na.rm=TRUE)
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONEC<-append(Kurtosis.ONEC,CoeffKurt)
+  Skewness.ONEC<-append(Skewness.ONEC,CoeffSkew)
+  Variance.ONEC<-append(Variance.ONEC,CoeffVar)
+  Start.date.ONEC<-append(Start.date.ONEC,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONEC<-append(End.date.ONEC,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
 
-KurtosisProb.ONEC<-Kurtosis.ONEC/sum(Kurtosis.ONEC)
-SkewnessProb.ONEC<-Skewness.ONEC/sum(Skewness.ONEC)
-VarianceProb.ONEC<-Variance.ONEC/sum(Variance.ONEC)
+Kurtosis.ONEC[is.nan(Kurtosis.ONEC)]<-0
+Skewness.ONEC[is.nan(Skewness.ONEC)]<-0
+Variance.ONEC[is.nan(Variance.ONEC)]<-0
+
+#KurtosisProb.ONEC<-Kurtosis.ONEC/sum(Kurtosis.ONEC)
+#SkewnessProb.ONEC<-Skewness.ONEC/sum(Skewness.ONEC)
+#VarianceProb.ONEC<-Variance.ONEC/sum(Variance.ONEC)
 
 ##Find mean variance
-mean(VarianceProb.ONEC)
+mean(Variance.ONEC)
 
 ###Find start date  
-Start.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide)[apply(Mating.Matrix.Data.ONEC_Wide != 0, 1, which.max)])
+#Start.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide)[apply(Mating.Matrix.Data.ONEC_Wide != 0, 1, which.max)])
 
 ###Find end date
-End.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide)[max.col(Mating.Matrix.Data.ONEC_Wide != 0, 'last')])
+#End.date.ONEC<-as.numeric(names(Mating.Matrix.Data.ONEC_Wide)[max.col(Mating.Matrix.Data.ONEC_Wide != 0, 'last')])
 
 
 ###Find duration
@@ -442,9 +483,9 @@ Duration.ONEC<-End.date.ONEC-Start.date.ONEC
 
 
 ##Convert to vector 
-Kurt.norm.ONEC<-as.vector(scale(KurtosisProb.ONEC))
-Skew.norm.ONEC<-as.vector(scale(SkewnessProb.ONEC))
-Var.norm.ONEC<-as.vector(scale(VarianceProb.ONEC))
+Kurt.norm.ONEC<-as.vector(scale(Kurtosis.ONEC))
+Skew.norm.ONEC<-as.vector(scale(Skewness.ONEC))
+Var.norm.ONEC<-as.vector(scale(Variance.ONEC))
 Start.date.norm.ONEC<-as.vector(scale(Start.date.ONEC))
 Duration.norm.ONEC<-as.vector(scale(Duration.ONEC))
 
@@ -486,6 +527,8 @@ trait.matrix.PC1.ONEC<-as.matrix(PC1.ONEC)
 #Rho -- PC1
 rho.matrix.PC1.ONEC <- t(trait.matrix.PC1.ONEC) %*% mating.matrix.ONEC %*% trait.matrix.PC1.ONEC
 rho.matrix.PC1.ONEC
+
+
 ```
 
 
@@ -506,12 +549,12 @@ for (i in 1:length(Individual_ID3)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -593,27 +636,40 @@ PC1.MDDB<-c()
 count3=0
 Mom.MDDB<-for( j in 1:length(Individual_ID3)){
     count3=count3+1
-  FocalMDDB<-dfset0[dfset0$Individual.x==Individual_ID3[j],]
-  Kurtosis.MDDB<-append(Kurtosis.MDDB,kurtosis(FocalMDDB$Flowers))
-  Skewness.MDDB<-append(Skewness.MDDB,skewness(FocalMDDB$Flowers))
-  Variance.MDDB<-append(Variance.MDDB,var(FocalMDDB$Flowers))
-  PC1.MDDB<-append(PC1.MDDB,PC1$PC1[PC1$Num==Individual_ID3[j]])
-}
+  Focal<-df3[df3$Individual.x==Individual_ID3[j],] 
+  pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.MDDB<-append(Kurtosis.MDDB,CoeffKurt)
+  Skewness.MDDB<-append(Skewness.MDDB,CoeffSkew)
+  Variance.MDDB<-append(Variance.MDDB,CoeffVar)
+  Start.date.MDDB<-append(Start.date.MDDB,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.MDDB<-append(End.date.MDDB,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.MDDB[is.nan(Kurtosis.MDDB)]<-0
+Skewness.MDDB[is.nan(Skewness.MDDB)]<-0
+Variance.MDDB[is.nan(Variance.MDDB)]<-0
+
 
 
 #Find probabilities of each moment.
-KurtosisProb.MDDB<-Kurtosis.MDDB/sum(Kurtosis.MDDB)
-SkewnessProb.MDDB<-Skewness.MDDB/sum(Skewness.MDDB)
-VarianceProb.MDDB<-Variance.MDDB/sum(Variance.MDDB)
+#KurtosisProb.MDDB<-Kurtosis.MDDB/sum(Kurtosis.MDDB)
+#SkewnessProb.MDDB<-Skewness.MDDB/sum(Skewness.MDDB)
+#VarianceProb.MDDB<-Variance.MDDB/sum(Variance.MDDB)
 
 ###Find average variance 
-mean(VarianceProb.MDDB)
+mean(Variance.MDDB)
 
 ###Find start date
-Start.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide)[apply(Mating.Matrix.Data.MDDB_Wide != 0, 1, which.max)])
+#Start.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide)[apply(Mating.Matrix.Data.MDDB_Wide != 0, 1, which.max)])
 
 ###Find end date
-End.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide)[max.col(Mating.Matrix.Data.MDDB_Wide != 0, 'last')])
+#End.date.MDDB<-as.numeric(names(Mating.Matrix.Data.MDDB_Wide)[max.col(Mating.Matrix.Data.MDDB_Wide != 0, 'last')])
 
 
 ###Find duration
@@ -621,9 +677,9 @@ Duration.MDDB<-End.date.MDDB-Start.date.MDDB
 
 
 ##Get z vector 
-Kurt.norm.MDDB<-as.vector(scale(KurtosisProb.MDDB))
-Skew.norm.MDDB<-as.vector(scale(SkewnessProb.MDDB))
-Var.norm.MDDB<-as.vector(scale(VarianceProb.MDDB))
+Kurt.norm.MDDB<-as.vector(scale(Kurtosis.MDDB))
+Skew.norm.MDDB<-as.vector(scale(Skewness.MDDB))
+Var.norm.MDDB<-as.vector(scale(Variance.MDDB))
 Start.date.norm.MDDB<-as.vector(scale(Start.date.MDDB))
 Duration.norm.MDDB<-as.vector(scale(Duration.MDDB))
 
@@ -659,10 +715,10 @@ rho.matrix.d.MDDB <- t(trait.matrix.d.MDDB) %*% mating.matrix.MDDB %*% trait.mat
 rho.matrix.d.MDDB
 
 #Trait matrix -- PC1
-trait.matrix.PC1.MDDB<-as.matrix(PC1.MDDB)
+#trait.matrix.PC1.MDDB<-as.matrix(PC1.MDDB)
 #Rho -- PC1
-rho.matrix.PC1.MDDB <- t(trait.matrix.PC1.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.PC1.MDDB
-rho.matrix.PC1.MDDB
+#rho.matrix.PC1.MDDB <- t(trait.matrix.PC1.MDDB) %*% mating.matrix.MDDB %*% trait.matrix.PC1.MDDB
+#rho.matrix.PC1.MDDB
 
 ```
 
@@ -672,7 +728,9 @@ rho.matrix.PC1.MDDB
 ONRO<-subset(Flwr,Flwr$Pop=="ONRO")
 
 #New code
-Individual_ID4<-unique(ONRO$Num) 
+Individual_ID4<-unique(ONRO$Num)
+# Individual_ID4<-Individual_ID4[Individual_ID4!=235] #tried removing some flowering curves that looked strange to see if that made the rho values more reasonable. It didn't.
+
 
 ##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
 MasterDataONRO<-matrix(nrow=0,ncol=4)
@@ -682,12 +740,12 @@ for (i in 1:length(Individual_ID4)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -709,7 +767,6 @@ for (i in 1:length(Individual_ID4)) {
 
 df3<-matrix(ncol=6,nrow=0)
 colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0")
-Individual_ID4<-unique(MasterDataONRO$Individual)
 Days<-c()
 Individual<-c()
 Flowers<-c()
@@ -754,7 +811,7 @@ sum.mating.matrix.ONRO<- sum(mating.matrix.ONRO) #should be 1
 
 ##Principal component analysis for S of ONRO population
 
-prcomp(mating.matrix.ONRO,scale=FALSE)
+#prcomp(mating.matrix.ONRO,scale=FALSE)
 X4<-eigen(mating.matrix.ONRO,symmetric=TRUE,only.values=TRUE) #Difference in output between symmetric=TRUE and symmetric=FALSE is that when set to FALSE, same values are outputed but there is "+0.00e+00i" addition
 
 ##Finding S for ONRO
@@ -776,39 +833,51 @@ PC1.ONRO<-c()
 count4=0
 Mom.ONRO<-for( j in 1:length(Individual_ID4)){
     count4=count4+1
-  Focal.ONRO<-dfset0[dfset0$Individual.x==Individual_ID4[j],]
-  Kurtosis.ONRO<-append(Kurtosis.ONRO,kurtosis(Focal.ONRO$Flowers))
-  Skewness.ONRO<-append(Skewness.ONRO,skewness(Focal.ONRO$Flowers))
-  Variance.ONRO<-append(Variance.ONRO,var(Focal.ONRO$Flowers))
-  PC1.ONRO<-append(PC1.ONRO,PC1$PC1[PC1$Num==Individual_ID4[j]])
-}
+  Focal<-df3[df3$Individual.x==Individual_ID4[j],]
+  pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONRO<-append(Kurtosis.ONRO,CoeffKurt)
+  Skewness.ONRO<-append(Skewness.ONRO,CoeffSkew)
+  Variance.ONRO<-append(Variance.ONRO,CoeffVar)
+  Start.date.ONRO<-append(Start.date.ONRO,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONRO<-append(End.date.ONRO,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.ONRO[is.nan(Kurtosis.ONRO)]<-0
+Skewness.ONRO[is.nan(Skewness.ONRO)]<-0
+Variance.ONRO[is.nan(Variance.ONRO)]<-0
 
 
 ##Find probabilities of each moment.
-KurtosisProb.ONRO<-Kurtosis.ONRO/sum(Kurtosis.ONRO)
-SkewnessProb.ONRO<-Skewness.ONRO/sum(Skewness.ONRO)
-VarianceProb.ONRO<-Variance.ONRO/sum(Variance.ONRO)
+#KurtosisProb.ONRO<-Kurtosis.ONRO/sum(Kurtosis.ONRO)
+#SkewnessProb.ONRO<-Skewness.ONRO/sum(Skewness.ONRO)
+#VarianceProb.ONRO<-Variance.ONRO/sum(Variance.ONRO)
 
 ##Find average variance.
-mean(VarianceProb.ONRO)
+mean(Variance.ONRO)
 
 
 ###Find start date 
-Start.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[apply(Mating.Matrix.Data.ONRO_Wide != 0, 1, which.max)])
-Start.date.ONRO
+#Start.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[apply(Mating.Matrix.Data.ONRO_Wide != 0, 1, which.max)])
+#Start.date.ONRO
 
 ###Find end date
-End.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[max.col(Mating.Matrix.Data.ONRO_Wide != 0, 'last')])
-End.date.ONRO
+#End.date.ONRO<-as.numeric(names(Mating.Matrix.Data.ONRO_Wide)[max.col(Mating.Matrix.Data.ONRO_Wide != 0, 'last')])
+#End.date.ONRO
 
 ###Find duration
 Duration.ONRO<-End.date.ONRO-Start.date.ONRO
 Duration.ONRO
 
 ##Get z vector 
-Kurt.norm.ONRO<-as.vector(scale(KurtosisProb.ONRO))
-Skew.norm.ONRO<-as.vector(scale(SkewnessProb.ONRO))
-Var.norm.ONRO<-as.vector(scale(VarianceProb.ONRO))
+Kurt.norm.ONRO<-as.vector(scale(Kurtosis.ONRO))
+Skew.norm.ONRO<-as.vector(scale(Skewness.ONRO))
+Var.norm.ONRO<-as.vector(scale(Variance.ONRO))
 Start.date.norm.ONRO<-as.vector(scale(Start.date.ONRO))
 Duration.norm.ONRO<-as.vector(scale(Duration.ONRO))
 
@@ -846,10 +915,10 @@ rho.matrix.d.ONRO <- t(trait.matrix.d.ONRO) %*% mating.matrix.ONRO %*% trait.mat
 rho.matrix.d.ONRO
 
 #Trait matrix -- PC1
-trait.matrix.PC1.ONRO<-as.matrix(PC1.ONRO)
+#trait.matrix.PC1.ONRO<-as.matrix(PC1.ONRO)
 #Rho -- PC1
-rho.matrix.PC1.ONRO <- t(trait.matrix.PC1.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.PC1.ONRO
-rho.matrix.PC1.ONRO
+#rho.matrix.PC1.ONRO <- t(trait.matrix.PC1.ONRO) %*% mating.matrix.ONRO %*% trait.matrix.PC1.ONRO
+#rho.matrix.PC1.ONRO
 ```
 
 
@@ -871,12 +940,12 @@ for (i in 1:length(Individual_ID5)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -888,12 +957,12 @@ for (i in 1:length(Individual_ID5)) {
 
 
 #PredictDay function for NYSC dataset
-PredictDayNYSC<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayNYSC<-function(Num,days=c(0:125),df){
+ # Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -906,7 +975,7 @@ count5=0
 for( j in 1:length(Individual_ID5)){
     count5=count5+1
   FocalFrame<-MasterDataNYSC[MasterDataNYSC$Individual==Individual_ID5[j],]
-  Flowers<-PredictDayNYSC(Num=Individual_ID5[j],df=MasterDataNYSC)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID5[j],df=MasterDataNYSC)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID5[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -935,6 +1004,8 @@ flr.matrix.NYSC<-as.matrix(Mating.Matrix.Data.NYSC_Wide)
 mother.flr.matrix.NYSC<- flr.matrix.NYSC/sum(flr.matrix.NYSC)
 father.colsum.NYSC<- apply(flr.matrix.NYSC, 2,  sum)
 father.flr.matrix.NYSC<- apply(flr.matrix.NYSC, 1, function(d) d/father.colsum.NYSC) #don't understand this line
+father.flr.matrix.NYSC[is.nan(father.flr.matrix.NYSC)]<-0
+father.flr.matrix.NYSC[is.infinite(father.flr.matrix.NYSC)]<-0
 mating.matrix.NYSC <- mother.flr.matrix.NYSC %*% father.flr.matrix.NYSC #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.NYSC<- sum(mating.matrix.NYSC) #should be 1
 sum.mating.matrix.NYSC
@@ -964,27 +1035,41 @@ Duration.NYSC<-c()
 count5=0
 Mom.NYSC<-for( j in 1:length(Individual_ID5)){
     count5=count5+1
-  Focal.NYSC<-dfset0[dfset0$Individual.x==Individual_ID5[j],]
-  Kurtosis.NYSC<-append(Kurtosis.NYSC,kurtosis(Focal.NYSC$Flowers))
-  Skewness.NYSC<-append(Skewness.NYSC,skewness(Focal.NYSC$Flowers))
-  Variance.NYSC<-append(Variance.NYSC,var(Focal.NYSC$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID5[j],]
+    pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.NYSC<-append(Kurtosis.NYSC,CoeffKurt)
+  Skewness.NYSC<-append(Skewness.NYSC,CoeffSkew)
+  Variance.NYSC<-append(Variance.NYSC,CoeffVar)
+  Start.date.NYSC<-append(Start.date.NYSC,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.NYSC<-append(End.date.NYSC,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.NYSC[is.nan(Kurtosis.NYSC)]<-0
+Skewness.NYSC[is.nan(Skewness.NYSC)]<-0
+Variance.NYSC[is.nan(Variance.NYSC)]<-0
 
 #Find probabilities of each moment.
-KurtosisProb.NYSC<-Kurtosis.NYSC/sum(Kurtosis.NYSC)
-SkewnessProb.NYSC<-Skewness.NYSC/sum(Skewness.NYSC)
-VarianceProb.NYSC<-Variance.NYSC/sum(Variance.NYSC)
+#KurtosisProb.NYSC<-Kurtosis.NYSC/sum(Kurtosis.NYSC)
+#SkewnessProb.NYSC<-Skewness.NYSC/sum(Skewness.NYSC)
+#VarianceProb.NYSC<-Variance.NYSC/sum(Variance.NYSC)
 
 
 ##Find average variance.
-mean(VarianceProb.NYSC)
+mean(Variance.NYSC)
 
 ###Find start date
-Start.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide)[apply(Mating.Matrix.Data.NYSC_Wide != 0, 1, which.max)]) ##Take out -1
-Start.date.NYSC
+#Start.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide)[apply(Mating.Matrix.Data.NYSC_Wide != 0, 1, which.max)]) ##Take out -1
+#Start.date.NYSC
 
 ###Find end date
-End.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide)[max.col(Mating.Matrix.Data.NYSC_Wide != 0, 'last')])
-End.date.NYSC
+#End.date.NYSC<-as.numeric(names(Mating.Matrix.Data.NYSC_Wide)[max.col(Mating.Matrix.Data.NYSC_Wide != 0, 'last')])
+#End.date.NYSC
 
 ###Find duration
 Duration.NYSC<-End.date.NYSC-Start.date.NYSC
@@ -993,9 +1078,9 @@ Duration.NYSC<-End.date.NYSC-Start.date.NYSC
 
 
 ##Convert to z vector. 
-Kurt.norm.NYSC<-as.vector(scale(KurtosisProb.NYSC))
-Skew.norm.NYSC<-as.vector(scale(SkewnessProb.NYSC))
-Var.norm.NYSC<-as.vector(scale(VarianceProb.NYSC))
+Kurt.norm.NYSC<-as.vector(scale(Kurtosis.NYSC))
+Skew.norm.NYSC<-as.vector(scale(Skewness.NYSC))
+Var.norm.NYSC<-as.vector(scale(Variance.NYSC))
 Start.date.norm.NYSC<-as.vector(scale(Start.date.NYSC))
 Duration.norm.NYSC<-as.vector(scale(Duration.NYSC)) 
 
@@ -1051,12 +1136,12 @@ for (i in 1:length(Individual_ID6)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1067,12 +1152,12 @@ for (i in 1:length(Individual_ID6)) {
 }
 
 #PredictDay function for NYLV dataset
-PredictDayNYLV<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayNYLV<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 
@@ -1087,7 +1172,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID6)){
     count6=count6+1
   FocalFrame<-MasterDataNYLV[MasterDataNYLV$Individual==Individual_ID6[j],]
-  Flowers<-PredictDayNYLV(Num=Individual_ID6[j],df=MasterDataNYLV)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID6[j],df=MasterDataNYLV)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID6[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1109,6 +1194,8 @@ flr.matrix.NYLV<-as.matrix(Mating.Matrix.Data.NYLV_Wide)
 mother.flr.matrix.NYLV<- flr.matrix.NYLV/sum(flr.matrix.NYLV)
 father.colsum.NYLV<- apply(flr.matrix.NYLV, 2,  sum)
 father.flr.matrix.NYLV<- apply(flr.matrix.NYLV, 1, function(d) d/father.colsum.NYLV) #don't understand this line
+father.flr.matrix.NYLV[is.nan(father.flr.matrix.NYLV)]<-0
+father.flr.matrix.NYLV[is.infinite(father.flr.matrix.NYLV)]<-0
 mating.matrix.NYLV <- mother.flr.matrix.NYLV %*% father.flr.matrix.NYLV #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.NYLV<- sum(mating.matrix.NYLV) #should be 1
 
@@ -1135,28 +1222,42 @@ Duration.NYLV<-c()
 count6=0
 Mom.NYLV<-for( j in 1:length(Individual_ID6)){
     count6=count6+1
-  Focal.NYLV<-dfset0[dfset0$Individual.x==Individual_ID6[j],]
-  Kurtosis.NYLV<-append(Kurtosis.NYLV,kurtosis(Focal.NYLV$Flowers))
-  Skewness.NYLV<-append(Skewness.NYLV,skewness(Focal.NYLV$Flowers))
-  Variance.NYLV<-append(Variance.NYLV,var(Focal.NYLV$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID6[j],]
+      pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.NYLV<-append(Kurtosis.NYLV,CoeffKurt)
+  Skewness.NYLV<-append(Skewness.NYLV,CoeffSkew)
+  Variance.NYLV<-append(Variance.NYLV,CoeffVar)
+  Start.date.NYLV<-append(Start.date.NYLV,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.NYLV<-append(End.date.NYLV,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.NYLV[is.nan(Kurtosis.NYLV)]<-0
+Skewness.NYLV[is.nan(Skewness.NYLV)]<-0
+Variance.NYLV[is.nan(Variance.NYLV)]<-0
 
 #Find probabilities
-KurtosisProb.NYLV<-Kurtosis.NYLV/sum(Kurtosis.NYLV)
-SkewnessProb.NYLV<-Skewness.NYLV/sum(Skewness.NYLV)
-VarianceProb.NYLV<-Variance.NYLV/sum(Variance.NYLV)
+#KurtosisProb.NYLV<-Kurtosis.NYLV/sum(Kurtosis.NYLV)
+#SkewnessProb.NYLV<-Skewness.NYLV/sum(Skewness.NYLV)
+#VarianceProb.NYLV<-Variance.NYLV/sum(Variance.NYLV)
 
 
 
 ##Find average variance probability.
-mean(VarianceProb.NYLV)
+mean(Variance.NYLV)
 
 ###Find start date
-Start.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide)[apply(Mating.Matrix.Data.NYLV_Wide != 0, 1, which.max)])
-Start.date.NYLV
+#Start.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide)[apply(Mating.Matrix.Data.NYLV_Wide != 0, 1, which.max)])
+#Start.date.NYLV
 
 ###Find end date
-End.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide)[max.col(Mating.Matrix.Data.NYLV_Wide != 0, 'last')])
-End.date.NYLV
+#End.date.NYLV<-as.numeric(names(Mating.Matrix.Data.NYLV_Wide)[max.col(Mating.Matrix.Data.NYLV_Wide != 0, 'last')])
+#End.date.NYLV
 
 ###Find duration
 Duration.NYLV<-End.date.NYLV-Start.date.NYLV
@@ -1164,9 +1265,9 @@ Duration.NYLV<-End.date.NYLV-Start.date.NYLV
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.NYLV<-as.vector(scale(KurtosisProb.NYLV))
-Skew.norm.NYLV<-as.vector(scale(SkewnessProb.NYLV))
-Var.norm.NYLV<-as.vector(scale(VarianceProb.NYLV))
+Kurt.norm.NYLV<-as.vector(scale(Kurtosis.NYLV))
+Skew.norm.NYLV<-as.vector(scale(Skewness.NYLV))
+Var.norm.NYLV<-as.vector(scale(Variance.NYLV))
 Start.date.norm.NYLV<-as.vector(scale(Start.date.NYLV))
 Duration.norm.NYLV<-as.vector(scale(Duration.NYLV))
 
@@ -1220,12 +1321,12 @@ for (i in 1:length(Individual_ID7)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1236,12 +1337,12 @@ for (i in 1:length(Individual_ID7)) {
 }
 
 #PredictDay function for ONDM dataset
-PredictDayONDM<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayONDM<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -1255,7 +1356,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID7)){
     count7=count7+1
   FocalFrame<-MasterDataONDM[MasterDataONDM$Individual==Individual_ID7[j],]
-  Flowers<-PredictDayONDM(Num=Individual_ID7[j],df=MasterDataONDM)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID7[j],df=MasterDataONDM)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID7[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1277,6 +1378,8 @@ flr.matrix.ONDM<-as.matrix(Mating.Matrix.Data.ONDM_Wide)
 mother.flr.matrix.ONDM<- flr.matrix.ONDM/sum(flr.matrix.ONDM)
 father.colsum.ONDM<- apply(flr.matrix.ONDM, 2,  sum)
 father.flr.matrix.ONDM<- apply(flr.matrix.ONDM, 1, function(d) d/father.colsum.ONDM) #don't understand this line
+father.flr.matrix.ONDM[is.nan(father.flr.matrix.ONDM)]<-0
+father.flr.matrix.ONDM[is.infinite(father.flr.matrix.ONDM)]<-0
 mating.matrix.ONDM <- mother.flr.matrix.ONDM %*% father.flr.matrix.ONDM #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONDM<- sum(mating.matrix.ONDM) #should be 1
 
@@ -1303,27 +1406,40 @@ Duration.ONDM<-c()
 count7=0
 Mom.ONDM<-for( j in 1:length(Individual_ID7)){
     count7=count7+1
-  Focal.ONDM<-dfset0[dfset0$Individual.x==Individual_ID7[j],]
-  Kurtosis.ONDM<-append(Kurtosis.ONDM,kurtosis(Focal.ONDM$Flowers))
-  Skewness.ONDM<-append(Skewness.ONDM,skewness(Focal.ONDM$Flowers))
-  Variance.ONDM<-append(Variance.ONDM,var(Focal.ONDM$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID7[j],]
+      pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONDM<-append(Kurtosis.ONDM,CoeffKurt)
+  Skewness.ONDM<-append(Skewness.ONDM,CoeffSkew)
+  Variance.ONDM<-append(Variance.ONDM,CoeffVar)
+  Start.date.ONDM<-append(Start.date.ONDM,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONDM<-append(End.date.ONDM,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
 
+Kurtosis.ONDM[is.nan(Kurtosis.ONDM)]<-0
+Skewness.ONDM[is.nan(Skewness.ONDM)]<-0
+Variance.ONDM[is.nan(Variance.ONDM)]<-0
 
 #Find probabilities of each moment.
-KurtosisProb.ONDM<-Kurtosis.ONDM/sum(Kurtosis.ONDM)
-SkewnessProb.ONDM<-Skewness.ONDM/sum(Skewness.ONDM)
-VarianceProb.ONDM<-Variance.ONDM/sum(Variance.ONDM)
+#KurtosisProb.ONDM<-Kurtosis.ONDM/sum(Kurtosis.ONDM)
+#SkewnessProb.ONDM<-Skewness.ONDM/sum(Skewness.ONDM)
+#VarianceProb.ONDM<-Variance.ONDM/sum(Variance.ONDM)
 
 ##Find average variance.
-mean(VarianceProb.ONDM)
+mean(Variance.ONDM)
 
 ###Find start date
-Start.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide)[apply(Mating.Matrix.Data.ONDM_Wide != 0, 1, which.max)])
-Start.date.ONDM
+#Start.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide)[apply(Mating.Matrix.Data.ONDM_Wide != 0, 1, which.max)])
+#Start.date.ONDM
 
 ###Find end date
-End.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide)[max.col(Mating.Matrix.Data.ONDM_Wide != 0, 'last')])
-End.date.ONDM
+#End.date.ONDM<-as.numeric(names(Mating.Matrix.Data.ONDM_Wide)[max.col(Mating.Matrix.Data.ONDM_Wide != 0, 'last')])
+#End.date.ONDM
 
 ###Find duration
 Duration.ONDM<-End.date.ONDM-Start.date.ONDM
@@ -1331,9 +1447,9 @@ Duration.ONDM<-End.date.ONDM-Start.date.ONDM
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.ONDM<-as.vector(scale(KurtosisProb.ONDM))
-Skew.norm.ONDM<-as.vector(scale(SkewnessProb.ONDM))
-Var.norm.ONDM<-as.vector(scale(VarianceProb.ONDM))
+Kurt.norm.ONDM<-as.vector(scale(Kurtosis.ONDM))
+Skew.norm.ONDM<-as.vector(scale(Skewness.ONDM))
+Var.norm.ONDM<-as.vector(scale(Variance.ONDM))
 Start.date.norm.ONDM<-as.vector(scale(Start.date.ONDM))
 Duration.norm.ONDM<-as.vector(scale(Duration.ONDM))
 
@@ -1350,7 +1466,11 @@ trait.matrix.s.ONDM<-as.matrix(Skew.norm.ONDM)
 rho.matrix.s.ONDM<- t(trait.matrix.s.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.s.ONDM
 rho.matrix.s.ONDM
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.ONDM<-as.matrix(Var.norm.ONDM) 
+#Rho -- Variance
+rho.matrix.v.ONDM <- t(trait.matrix.v.ONDM) %*% mating.matrix.ONDM %*% trait.matrix.v.ONDM
+rho.matrix.v.ONDM
 
 #Trait matrix -- Start date
 trait.matrix.st.ONDM<-as.matrix(Start.date.norm.ONDM) 
@@ -1384,12 +1504,12 @@ for (i in 1:length(Individual_ID8)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1400,12 +1520,12 @@ for (i in 1:length(Individual_ID8)) {
 }
 
 #PredictDay function for ONTI dataset
-PredictDayONTI<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayONTI<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -1419,7 +1539,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID8)){
     count8=count8+1
   FocalFrame<-MasterDataONTI[MasterDataONTI$Individual==Individual_ID8[j],]
-  Flowers<-PredictDayONTI(Num=Individual_ID8[j],df=MasterDataONTI)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID8[j],df=MasterDataONTI)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID8[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1443,6 +1563,8 @@ flr.matrix.ONTI<-as.matrix(Mating.Matrix.Data.ONTI_Wide)
 mother.flr.matrix.ONTI<- flr.matrix.ONTI/sum(flr.matrix.ONTI)
 father.colsum.ONTI<- apply(flr.matrix.ONTI, 2,  sum)
 father.flr.matrix.ONTI<- apply(flr.matrix.ONTI, 1, function(d) d/father.colsum.ONTI) #don't understand this line
+father.flr.matrix.ONTI[is.nan(father.flr.matrix.ONTI)]<-0
+father.flr.matrix.ONTI[is.infinite(father.flr.matrix.ONTI)]<-0
 mating.matrix.ONTI <- mother.flr.matrix.ONTI %*% father.flr.matrix.ONTI #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONTI<- sum(mating.matrix.ONTI) #should be 1
 
@@ -1469,26 +1591,41 @@ Duration.ONTI<-c()
 count8=0
 Mom.ONTI<-for( j in 1:length(Individual_ID8)){
     count8=count8+1
-  Focal.ONTI<-dfset0[dfset0$Individual.x==Individual_ID8[j],]
-  Kurtosis.ONTI<-append(Kurtosis.ONTI,kurtosis(Focal.ONTI$Flowers))
-  Skewness.ONTI<-append(Skewness.ONTI,skewness(Focal.ONTI$Flowers))
-  Variance.ONTI<-append(Variance.ONTI,var(Focal.ONTI$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID8[j],]
+       pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONTI<-append(Kurtosis.ONTI,CoeffKurt)
+  Skewness.ONTI<-append(Skewness.ONTI,CoeffSkew)
+  Variance.ONTI<-append(Variance.ONTI,CoeffVar)
+  Start.date.ONTI<-append(Start.date.ONTI,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONTI<-append(End.date.ONTI,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.ONTI[is.nan(Kurtosis.ONTI)]<-0
+Skewness.ONTI[is.nan(Skewness.ONTI)]<-0
+Variance.ONTI[is.nan(Variance.ONTI)]<-0
+
 
 #Find probabilities of moments.
-KurtosisProb.ONTI<-Kurtosis.ONTI/sum(Kurtosis.ONTI)
-SkewnessProb.ONTI<-Skewness.ONTI/sum(Skewness.ONTI)
-VarianceProb.ONTI<-Variance.ONTI/sum(Variance.ONTI)
+#KurtosisProb.ONTI<-Kurtosis.ONTI/sum(Kurtosis.ONTI)
+#SkewnessProb.ONTI<-Skewness.ONTI/sum(Skewness.ONTI)
+#VarianceProb.ONTI<-Variance.ONTI/sum(Variance.ONTI)
 
 ##Find average variance.
-mean(VarianceProb.ONTI)
+mean(Variance.ONTI)
 
 ###Find start date
-Start.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide)[apply(Mating.Matrix.Data.ONTI_Wide != 0, 1, which.max)])
-Start.date.ONTI
+#Start.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide)[apply(Mating.Matrix.Data.ONTI_Wide != 0, 1, which.max)])
+#Start.date.ONTI
 
 ###Find end date
-End.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide)[max.col(Mating.Matrix.Data.ONTI_Wide != 0, 'last')])
-End.date.ONTI
+#End.date.ONTI<-as.numeric(names(Mating.Matrix.Data.ONTI_Wide)[max.col(Mating.Matrix.Data.ONTI_Wide != 0, 'last')])
+#End.date.ONTI
 
 ###Find duration
 Duration.ONTI<-End.date.ONTI-Start.date.ONTI
@@ -1496,9 +1633,9 @@ Duration.ONTI<-End.date.ONTI-Start.date.ONTI
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.ONTI<-as.vector(scale(KurtosisProb.ONTI))
-Skew.norm.ONTI<-as.vector(scale(SkewnessProb.ONTI))
-Var.norm.ONTI<-as.vector(scale(VarianceProb.ONTI))
+Kurt.norm.ONTI<-as.vector(scale(Kurtosis.ONTI))
+Skew.norm.ONTI<-as.vector(scale(Skewness.ONTI))
+Var.norm.ONTI<-as.vector(scale(Variance.ONTI))
 Start.date.norm.ONTI<-as.vector(scale(Start.date.ONTI))
 Duration.norm.ONTI<-as.vector(scale(Duration.ONTI))
 
@@ -1515,7 +1652,11 @@ trait.matrix.s.ONTI<-as.matrix(Skew.norm.ONTI)
 rho.matrix.s.ONTI <- t(trait.matrix.s.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.s.ONTI
 rho.matrix.s.ONTI
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.ONTI<-as.matrix(Var.norm.ONTI) 
+#Rho -- Variance
+rho.matrix.v.ONTI <- t(trait.matrix.v.ONTI) %*% mating.matrix.ONTI %*% trait.matrix.v.ONTI
+rho.matrix.v.ONTI
 
 #Trait matrix -- Start date
 trait.matrix.st.ONTI<-as.matrix(Start.date.norm.ONTI) 
@@ -1547,12 +1688,12 @@ for (i in 1:length(Individual_ID9)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1563,12 +1704,12 @@ for (i in 1:length(Individual_ID9)) {
 }
 
 #PredictDay function for ONWH dataset
-PredictDayONWH<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayONWH<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 #For-loop
 Days<-c()
@@ -1581,7 +1722,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID9)){
     count9=count9+1
   FocalFrame<-MasterDataONWH[MasterDataONWH$Individual==Individual_ID9[j],]
-  Flowers<-PredictDayONWH(Num=Individual_ID9[j],df=MasterDataONWH)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID9[j],df=MasterDataONWH)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID9[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1604,6 +1745,8 @@ flr.matrix.ONWH<-as.matrix(Mating.Matrix.Data.ONWH_Wide)
 mother.flr.matrix.ONWH<- flr.matrix.ONWH/sum(flr.matrix.ONWH)
 father.colsum.ONWH<- apply(flr.matrix.ONWH, 2,  sum)
 father.flr.matrix.ONWH<- apply(flr.matrix.ONWH, 1, function(d) d/father.colsum.ONWH) #don't understand this line
+father.flr.matrix.ONWH[is.nan(father.flr.matrix.ONWH)]<-0
+father.flr.matrix.ONWH[is.infinite(father.flr.matrix.ONWH)]<-0
 mating.matrix.ONWH <- mother.flr.matrix.ONWH %*% father.flr.matrix.ONWH #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONWH<- sum(mating.matrix.ONWH) #should be 1
 
@@ -1631,26 +1774,40 @@ Duration.ONWH<-c()
 count9=0
 Mom.ONWH<-for( j in 1:length(Individual_ID9)){
     count9=count9+1
-  Focal.ONWH<-dfset0[dfset0$Individual.x==Individual_ID9[j],]
-  Kurtosis.ONWH<-append(Kurtosis.ONWH,kurtosis(Focal.ONWH$Flowers))
-  Skewness.ONWH<-append(Skewness.ONWH,skewness(Focal.ONWH$Flowers))
-  Variance.ONWH<-append(Variance.ONWH,var(Focal.ONWH$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID9[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONWH<-append(Kurtosis.ONWH,CoeffKurt)
+  Skewness.ONWH<-append(Skewness.ONWH,CoeffSkew)
+  Variance.ONWH<-append(Variance.ONWH,CoeffVar)
+  Start.date.ONWH<-append(Start.date.ONWH,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONWH<-append(End.date.ONWH,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.ONWH[is.nan(Kurtosis.ONWH)]<-0
+Skewness.ONWH[is.nan(Skewness.ONWH)]<-0
+Variance.ONWH[is.nan(Variance.ONWH)]<-0
 
 #Find probabilities of moments.
-KurtosisProb.ONWH<-Kurtosis.ONWH/sum(Kurtosis.ONWH)
-SkewnessProb.ONWH<-Skewness.ONWH/sum(Skewness.ONWH)
-VarianceProb.ONWH<-Variance.ONWH/sum(Variance.ONWH)
+#KurtosisProb.ONWH<-Kurtosis.ONWH/sum(Kurtosis.ONWH)
+#SkewnessProb.ONWH<-Skewness.ONWH/sum(Skewness.ONWH)
+#VarianceProb.ONWH<-Variance.ONWH/sum(Variance.ONWH)
 
 ##Find average variance.
-mean(VarianceProb.ONWH)
+mean(Variance.ONWH)
 
 ###Find start date 
-Start.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide)[apply(Mating.Matrix.Data.ONWH_Wide != 0, 1, which.max)])
-Start.date.ONWH
+#Start.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide)[apply(Mating.Matrix.Data.ONWH_Wide != 0, 1, which.max)])
+#Start.date.ONWH
 
 ###Find end date
-End.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide)[max.col(Mating.Matrix.Data.ONWH_Wide != 0, 'last')])
-End.date.ONWH
+#End.date.ONWH<-as.numeric(names(Mating.Matrix.Data.ONWH_Wide)[max.col(Mating.Matrix.Data.ONWH_Wide != 0, 'last')])
+#End.date.ONWH
 
 ###Find duration
 Duration.ONWH<-End.date.ONWH-Start.date.ONWH
@@ -1658,8 +1815,9 @@ Duration.ONWH<-End.date.ONWH-Start.date.ONWH
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.ONWH<-as.vector(scale(KurtosisProb.ONWH))
-Skew.norm.ONWH<-as.vector(scale(SkewnessProb.ONWH))
+Kurt.norm.ONWH<-as.vector(scale(Kurtosis.ONWH))
+Skew.norm.ONWH<-as.vector(scale(Skewness.ONWH))
+Var.norm.ONWH<-as.vector(scale(Variance.ONWH))
 Start.date.norm.ONWH<-as.vector(scale(Start.date.ONWH))
 Duration.norm.ONWH<-as.vector(scale(Duration.ONWH))
 
@@ -1676,7 +1834,11 @@ trait.matrix.s.ONWH<-as.matrix(Skew.norm.ONWH)
 rho.matrix.s.ONWH <- t(trait.matrix.s.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.s.ONWH
 rho.matrix.s.ONWH
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.ONWH<-as.matrix(Var.norm.ONWH) 
+#Rho -- Variance
+rho.matrix.v.ONWH <- t(trait.matrix.v.ONWH) %*% mating.matrix.ONWH %*% trait.matrix.v.ONWH
+rho.matrix.v.ONWH 
 
 #Trait matrix -- Start date
 trait.matrix.st.ONWH<-as.matrix(Start.date.norm.ONWH) 
@@ -1708,12 +1870,12 @@ for (i in 1:length(Individual_ID10)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1724,12 +1886,12 @@ for (i in 1:length(Individual_ID10)) {
 }
 
 #PredictDay function for NJHP dataset
-PredictDayNJHP<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayNJHP<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -1743,7 +1905,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID10)){
     count10=count10+1
   FocalFrame<-MasterDataNJHP[MasterDataNJHP$Individual==Individual_ID10[j],]
-  Flowers<-PredictDayNJHP(Num=Individual_ID10[j],df=MasterDataNJHP)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID10[j],df=MasterDataNJHP)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID10[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1766,6 +1928,8 @@ flr.matrix.NJHP<-as.matrix(Mating.Matrix.Data.NJHP_Wide)
 mother.flr.matrix.NJHP<- flr.matrix.NJHP/sum(flr.matrix.NJHP)
 father.colsum.NJHP<- apply(flr.matrix.NJHP, 2,  sum)
 father.flr.matrix.NJHP<- apply(flr.matrix.NJHP, 1, function(d) d/father.colsum.NJHP) #don't understand this line
+father.flr.matrix.NJHP[is.nan(father.flr.matrix.NJHP)]<-0
+father.flr.matrix.NJHP[is.infinite(father.flr.matrix.NJHP)]<-0
 mating.matrix.NJHP <- mother.flr.matrix.NJHP %*% father.flr.matrix.NJHP #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.NJHP<- sum(mating.matrix.NJHP) #should be 1
 
@@ -1793,27 +1957,41 @@ Duration.NJHP<-c()
 count10=0
 Mom.NJHP<-for( j in 1:length(Individual_ID10)){
     count10=count10+1
-  Focal.NJHP<-dfset0[dfset0$Individual.x==Individual_ID10[j],]
-  Kurtosis.NJHP<-append(Kurtosis.NJHP,kurtosis(Focal.NJHP$Flowers))
-  Skewness.NJHP<-append(Skewness.NJHP,skewness(Focal.NJHP$Flowers))
-  Variance.NJHP<-append(Variance.NJHP,var(Focal.NJHP$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID10[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.NJHP<-append(Kurtosis.NJHP,CoeffKurt)
+  Skewness.NJHP<-append(Skewness.NJHP,CoeffSkew)
+  Variance.NJHP<-append(Variance.NJHP,CoeffVar)
+  Start.date.NJHP<-append(Start.date.NJHP,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.NJHP<-append(End.date.NJHP,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.NJHP[is.nan(Kurtosis.NJHP)]<-0
+Skewness.NJHP[is.nan(Skewness.NJHP)]<-0
+Variance.NJHP[is.nan(Variance.NJHP)]<-0
 
 #Find probabilities of each moment.
-KurtosisProb.NJHP<-Kurtosis.NJHP/sum(Kurtosis.NJHP)
-SkewnessProb.NJHP<-Skewness.NJHP/sum(Skewness.NJHP)
-VarianceProb.NJHP<-Variance.NJHP/sum(Variance.NJHP)
+#KurtosisProb.NJHP<-Kurtosis.NJHP/sum(Kurtosis.NJHP)
+#SkewnessProb.NJHP<-Skewness.NJHP/sum(Skewness.NJHP)
+#VarianceProb.NJHP<-Variance.NJHP/sum(Variance.NJHP)
 
 
 ##Find average variance.
-mean(VarianceProb.NJHP)
+mean(Variance.NJHP)
 
 ###Find start date
-Start.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide)[apply(Mating.Matrix.Data.NJHP_Wide != 0, 1, which.max)])
-Start.date.NJHP
+#Start.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide)[apply(Mating.Matrix.Data.NJHP_Wide != 0, 1, which.max)])
+#Start.date.NJHP
 
 ###Find end date
-End.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide)[max.col(Mating.Matrix.Data.NJHP_Wide != 0, 'last')])
-End.date.NJHP
+#End.date.NJHP<-as.numeric(names(Mating.Matrix.Data.NJHP_Wide)[max.col(Mating.Matrix.Data.NJHP_Wide != 0, 'last')])
+#End.date.NJHP
 
 ###Find duration
 Duration.NJHP<-End.date.NJHP-Start.date.NJHP
@@ -1821,9 +1999,9 @@ Duration.NJHP<-End.date.NJHP-Start.date.NJHP
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.NJHP<-as.vector(scale(KurtosisProb.NJHP))
-Skew.norm.NJHP<-as.vector(scale(SkewnessProb.NJHP))
-Var.norm.NJHP<-as.vector(scale(VarianceProb.NJHP))
+Kurt.norm.NJHP<-as.vector(scale(Kurtosis.NJHP))
+Skew.norm.NJHP<-as.vector(scale(Skewness.NJHP))
+Var.norm.NJHP<-as.vector(scale(Variance.NJHP))
 Start.date.norm.NJHP<-as.vector(scale(Start.date.NJHP))
 Duration.norm.NJHP<-as.vector(scale(Duration.NJHP))
 
@@ -1840,7 +2018,11 @@ trait.matrix.s.NJHP<-as.matrix(Skew.norm.NJHP)
 rho.matrix.s.NJHP <- t(trait.matrix.s.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.s.NJHP
 rho.matrix.s.NJHP
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.NJHP<-as.matrix(Var.norm.NJHP) 
+#Rho -- Variance
+rho.matrix.v.NJHP <- t(trait.matrix.v.NJHP) %*% mating.matrix.NJHP %*% trait.matrix.v.NJHP
+rho.matrix.v.NJHP
 
 #Trait matrix -- Start date
 trait.matrix.st.NJHP<-as.matrix(Start.date.norm.NJHP) 
@@ -1873,12 +2055,12 @@ for (i in 1:length(Individual_ID11)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -1891,12 +2073,12 @@ for (i in 1:length(Individual_ID11)) {
 
 
 #PredictDay function for ONNO dataset
-PredictDayONNO<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayONNO<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -1910,7 +2092,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID11)){
     count11=count11+1
   FocalFrame<-MasterDataONNO[MasterDataONNO$Individual==Individual_ID11[j],]
-  Flowers<-PredictDayONNO(Num=Individual_ID11[j],df=MasterDataONNO)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID11[j],df=MasterDataONNO)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID11[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -1932,7 +2114,9 @@ flr.matrix.ONNO<-as.matrix(Mating.Matrix.Data.ONNO_Wide)
 #Mother/Father matrices
 mother.flr.matrix.ONNO<- flr.matrix.ONNO/sum(flr.matrix.ONNO)
 father.colsum.ONNO<- apply(flr.matrix.ONNO, 2,  sum)
-father.flr.matrix.ONNO<- apply(flr.matrix.ONNO, 1, function(d) d/father.colsum.ONNO) #don't understand this line
+father.flr.matrix.ONNO<- apply(flr.matrix.ONNO, 1, function(d) d/father.colsum.ONNO) 
+father.flr.matrix.ONNO[is.nan(father.flr.matrix.ONNO)]<-0
+father.flr.matrix.ONNO[is.infinite(father.flr.matrix.ONNO)]<-0
 mating.matrix.ONNO <- mother.flr.matrix.ONNO %*% father.flr.matrix.ONNO #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONNO<- sum(mating.matrix.ONNO) #should be 1
 
@@ -1960,27 +2144,41 @@ Duration.ONNO<-c()
 count11=0
 Mom.ONNO<-for( j in 1:length(Individual_ID11)){
     count11=count11+1
-  Focal.ONNO<-dfset0[dfset0$Individual.x==Individual_ID11[j],]
-  Kurtosis.ONNO<-append(Kurtosis.ONNO,kurtosis(Focal.ONNO$Flowers))
-  Skewness.ONNO<-append(Skewness.ONNO,skewness(Focal.ONNO$Flowers))
-  Variance.ONNO<-append(Variance.ONNO,var(Focal.ONNO$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID11[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONNO<-append(Kurtosis.ONNO,CoeffKurt)
+  Skewness.ONNO<-append(Skewness.ONNO,CoeffSkew)
+  Variance.ONNO<-append(Variance.ONNO,CoeffVar)
+  Start.date.ONNO<-append(Start.date.ONNO,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONNO<-append(End.date.ONNO,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.ONNO[is.nan(Kurtosis.ONNO)]<-0
+Skewness.ONNO[is.nan(Skewness.ONNO)]<-0
+Variance.ONNO[is.nan(Variance.ONNO)]<-0
 
 #Find probabilities of each moment.
-KurtosisProb.ONNO<-Kurtosis.ONNO/sum(Kurtosis.ONNO)
-SkewnessProb.ONNO<-Skewness.ONNO/sum(Skewness.ONNO)
-VarianceProb.ONNO<-Variance.ONNO/sum(Variance.ONNO)
+#KurtosisProb.ONNO<-Kurtosis.ONNO/sum(Kurtosis.ONNO)
+#SkewnessProb.ONNO<-Skewness.ONNO/sum(Skewness.ONNO)
+#VarianceProb.ONNO<-Variance.ONNO/sum(Variance.ONNO)
 
 ##Find average variance.
-mean(VarianceProb.ONNO)
+mean(Variance.ONNO)
 
 
 ###Find start date
-Start.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide)[apply(Mating.Matrix.Data.ONNO_Wide != 0, 1, which.max)])
-Start.date.ONNO
+#Start.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide)[apply(Mating.Matrix.Data.ONNO_Wide != 0, 1, which.max)])
+#Start.date.ONNO
 
 ###Find end date
-End.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide)[max.col(Mating.Matrix.Data.ONNO_Wide != 0, 'last')])
-End.date.ONNO
+#End.date.ONNO<-as.numeric(names(Mating.Matrix.Data.ONNO_Wide)[max.col(Mating.Matrix.Data.ONNO_Wide != 0, 'last')])
+#End.date.ONNO
 
 ###Find duration
 Duration.ONNO<-End.date.ONNO-Start.date.ONNO
@@ -1988,9 +2186,9 @@ Duration.ONNO<-End.date.ONNO-Start.date.ONNO
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.ONNO<-as.vector(scale(KurtosisProb.ONNO))
-Skew.norm.ONNO<-as.vector(scale(SkewnessProb.ONNO))
-Var.norm.ONNO<-as.vector(scale(VarianceProb.ONNO))
+Kurt.norm.ONNO<-as.vector(scale(Kurtosis.ONNO))
+Skew.norm.ONNO<-as.vector(scale(Skewness.ONNO))
+Var.norm.ONNO<-as.vector(scale(Variance.ONNO))
 Start.date.norm.ONNO<-as.vector(scale(Start.date.ONNO))
 Duration.norm.ONNO<-as.vector(scale(Duration.ONNO))
 
@@ -2007,7 +2205,11 @@ trait.matrix.s.ONNO<-as.matrix(Skew.norm.ONNO)
 rho.matrix.s.ONNO <- t(trait.matrix.s.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.s.ONNO
 rho.matrix.s.ONNO
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.ONNO<-as.matrix(Var.norm.ONNO) 
+#Rho -- Variance
+rho.matrix.v.ONNO <- t(trait.matrix.v.ONNO) %*% mating.matrix.ONNO %*% trait.matrix.v.ONNO
+rho.matrix.v.ONNO
 
 #Trait matrix -- Start date
 trait.matrix.st.ONNO<-as.matrix(Start.date.norm.ONNO) 
@@ -2041,12 +2243,12 @@ for (i in 1:length(Individual_ID12)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -2057,12 +2259,12 @@ for (i in 1:length(Individual_ID12)) {
 }
 
 #PredictDay function for NYCH dataset
-PredictDayNYCH<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayNYCH<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -2075,7 +2277,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID12)){
     count12=count12+1
   FocalFrame<-MasterDataNYCH[MasterDataNYCH$Individual==Individual_ID12[j],]
-  Flowers<-PredictDayNYCH(Num=Individual_ID12[j],df=MasterDataNYCH)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID12[j],df=MasterDataNYCH)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID12[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -2097,7 +2299,9 @@ flr.matrix.NYCH<-as.matrix(Mating.Matrix.Data.NYCH_Wide)
 #Mother/Father matrices
 mother.flr.matrix.NYCH<- flr.matrix.NYCH/sum(flr.matrix.NYCH)
 father.colsum.NYCH<- apply(flr.matrix.NYCH, 2,  sum)
-father.flr.matrix.NYCH<- apply(flr.matrix.NYCH, 1, function(d) d/father.colsum.NYCH) #don't understand this line
+father.flr.matrix.NYCH<- apply(flr.matrix.NYCH, 1, function(d) d/father.colsum.NYCH) 
+father.flr.matrix.NYCH[is.nan(father.flr.matrix.NYCH)]<-0
+father.flr.matrix.NYCH[is.infinite(father.flr.matrix.NYCH)]<-0
 mating.matrix.NYCH <- mother.flr.matrix.NYCH %*% father.flr.matrix.NYCH #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.NYCH<- sum(mating.matrix.NYCH) #should be 1
 
@@ -2125,26 +2329,40 @@ Duration.NYCH<-c()
 count12=0
 Mom.NYCH<-for( j in 1:length(Individual_ID12)){
     count12=count12+1
-  Focal.NYCH<-dfset0[dfset0$Individual.x==Individual_ID12[j],]
-  Kurtosis.NYCH<-append(Kurtosis.NYCH,kurtosis(Focal.NYCH$Flowers))
-  Skewness.NYCH<-append(Skewness.NYCH,skewness(Focal.NYCH$Flowers))
-  Variance.NYCH<-append(Variance.NYCH,var(Focal.NYCH$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID12[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.NYCH<-append(Kurtosis.NYCH,CoeffKurt)
+  Skewness.NYCH<-append(Skewness.NYCH,CoeffSkew)
+  Variance.NYCH<-append(Variance.NYCH,CoeffVar)
+  Start.date.NYCH<-append(Start.date.NYCH,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.NYCH<-append(End.date.NYCH,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.NYCH[is.nan(Kurtosis.NYCH)]<-0
+Skewness.NYCH[is.nan(Skewness.NYCH)]<-0
+Variance.NYCH[is.nan(Variance.NYCH)]<-0
 
 #Find probabilities of moments.
-KurtosisProb.NYCH<-Kurtosis.NYCH/sum(Kurtosis.NYCH)
-SkewnessProb.NYCH<-Skewness.NYCH/sum(Skewness.NYCH)
-VarianceProb.NYCH<-Variance.NYCH/sum(Variance.NYCH)
+#KurtosisProb.NYCH<-Kurtosis.NYCH/sum(Kurtosis.NYCH)
+#SkewnessProb.NYCH<-Skewness.NYCH/sum(Skewness.NYCH)
+#VarianceProb.NYCH<-Variance.NYCH/sum(Variance.NYCH)
 
 ##Find average variance.
-mean(VarianceProb.NYCH)
+mean(Variance.NYCH)
 
 ###Find start date
-Start.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide)[apply(Mating.Matrix.Data.NYCH_Wide != 0, 1, which.max)])
-Start.date.NYCH
+#Start.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide)[apply(Mating.Matrix.Data.NYCH_Wide != 0, 1, which.max)])
+#Start.date.NYCH
 
 ###Find end date
-End.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide)[max.col(Mating.Matrix.Data.NYCH_Wide != 0, 'last')])
-End.date.NYCH
+#End.date.NYCH<-as.numeric(names(Mating.Matrix.Data.NYCH_Wide)[max.col(Mating.Matrix.Data.NYCH_Wide != 0, 'last')])
+#End.date.NYCH
 
 ###Find duration
 Duration.NYCH<-End.date.NYCH-Start.date.NYCH
@@ -2152,8 +2370,9 @@ Duration.NYCH<-End.date.NYCH-Start.date.NYCH
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.NYCH<-as.vector(scale(KurtosisProb.NYCH))
-Skew.norm.NYCH<-as.vector(scale(SkewnessProb.NYCH))
+Kurt.norm.NYCH<-as.vector(scale(Kurtosis.NYCH))
+Skew.norm.NYCH<-as.vector(scale(Skewness.NYCH))
+Var.norm.NYCH<-as.vector(scale(Variance.NYCH))
 Start.date.norm.NYCH<-as.vector(scale(Start.date.NYCH))
 Duration.norm.NYCH<-as.vector(scale(Duration.NYCH))
 
@@ -2170,7 +2389,11 @@ trait.matrix.s.NYCH<-as.matrix(Skew.norm.NYCH)
 rho.matrix.s.NYCH <- t(trait.matrix.s.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.s.NYCH
 rho.matrix.s.NYCH
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.NYCH<-as.matrix(Var.norm.NYCH) 
+#Rho -- Variance
+rho.matrix.v.NYCH <- t(trait.matrix.v.NYCH) %*% mating.matrix.NYCH %*% trait.matrix.v.NYCH
+rho.matrix.v.NYCH
 
 #Trait matrix -- Start date
 trait.matrix.st.NYCH<-as.matrix(Start.date.norm.NYCH) 
@@ -2203,12 +2426,12 @@ for (i in 1:length(Individual_ID13)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -2221,12 +2444,12 @@ for (i in 1:length(Individual_ID13)) {
 
 
 #PredictDay function for ONPG dataset
-PredictDayONPG<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayONPG<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 #For-loop
@@ -2239,7 +2462,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID13)){
     count13=count13+1
   FocalFrame<-MasterDataONPG[MasterDataONPG$Individual==Individual_ID13[j],]
-  Flowers<-PredictDayONPG(Num=Individual_ID13[j],df=MasterDataONPG)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID13[j],df=MasterDataONPG)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID13[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -2263,7 +2486,9 @@ flr.matrix.ONPG<-as.matrix(Mating.Matrix.Data.ONPG_Wide)
 #Mother/Father matrices
 mother.flr.matrix.ONPG<- flr.matrix.ONPG/sum(flr.matrix.ONPG)
 father.colsum.ONPG<- apply(flr.matrix.ONPG, 2,  sum)
-father.flr.matrix.ONPG<- apply(flr.matrix.ONPG, 1, function(d) d/father.colsum.ONPG) #don't understand this line
+father.flr.matrix.ONPG<- apply(flr.matrix.ONPG, 1, function(d) d/father.colsum.ONPG) 
+father.flr.matrix.ONPG[is.nan(father.flr.matrix.ONPG)]<-0
+father.flr.matrix.ONPG[is.infinite(father.flr.matrix.ONPG)]<-0
 mating.matrix.ONPG <- mother.flr.matrix.ONPG %*% father.flr.matrix.ONPG #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.ONPG<- sum(mating.matrix.ONPG) #should be 1
 
@@ -2291,26 +2516,40 @@ Duration.ONPG<-c()
 count13=0
 Mom.ONPG<-for( j in 1:length(Individual_ID13)){
     count13=count13+1
-  Focal.ONPG<-dfset0[dfset0$Individual.x==Individual_ID13[j],]
-  Kurtosis.ONPG<-append(Kurtosis.ONPG,kurtosis(Focal.ONPG$Flowers))
-  Skewness.ONPG<-append(Skewness.ONPG,skewness(Focal.ONPG$Flowers))
-  Variance.ONPG<-append(Variance.ONPG,var(Focal.ONPG$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID13[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.ONPG<-append(Kurtosis.ONPG,CoeffKurt)
+  Skewness.ONPG<-append(Skewness.ONPG,CoeffSkew)
+  Variance.ONPG<-append(Variance.ONPG,CoeffVar)
+  Start.date.ONPG<-append(Start.date.ONPG,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.ONPG<-append(End.date.ONPG,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.ONPG[is.nan(Kurtosis.ONPG)]<-0
+Skewness.ONPG[is.nan(Skewness.ONPG)]<-0
+Variance.ONPG[is.nan(Variance.ONPG)]<-0
 
 #Find probabilities of moments.
-KurtosisProb.ONPG<-Kurtosis.ONPG/sum(Kurtosis.ONPG)
-SkewnessProb.ONPG<-Skewness.ONPG/sum(Skewness.ONPG)
-VarianceProb.ONPG<-Variance.ONPG/sum(Variance.ONPG)
+#KurtosisProb.ONPG<-Kurtosis.ONPG/sum(Kurtosis.ONPG)
+#SkewnessProb.ONPG<-Skewness.ONPG/sum(Skewness.ONPG)
+#VarianceProb.ONPG<-Variance.ONPG/sum(Variance.ONPG)
 
 ##Find average variance.
-mean(VarianceProb.ONPG)
+mean(Variance.ONPG)
 
 ###Find start date
-Start.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide)[apply(Mating.Matrix.Data.ONPG_Wide != 0, 1, which.max)])
-Start.date.ONPG
+#Start.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide)[apply(Mating.Matrix.Data.ONPG_Wide != 0, 1, which.max)])
+#Start.date.ONPG
 
 ###Find end date
-End.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide)[max.col(Mating.Matrix.Data.ONPG_Wide != 0, 'last')])
-End.date.ONPG
+#End.date.ONPG<-as.numeric(names(Mating.Matrix.Data.ONPG_Wide)[max.col(Mating.Matrix.Data.ONPG_Wide != 0, 'last')])
+#End.date.ONPG
 
 ###Find duration
 Duration.ONPG<-End.date.ONPG-Start.date.ONPG
@@ -2318,9 +2557,9 @@ Duration.ONPG<-End.date.ONPG-Start.date.ONPG
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.ONPG<-as.vector(scale(KurtosisProb.ONPG))
-Skew.norm.ONPG<-as.vector(scale(SkewnessProb.ONPG))
-Var.norm.ONPG<-as.vector(scale(VarianceProb.ONPG))
+Kurt.norm.ONPG<-as.vector(scale(Kurtosis.ONPG))
+Skew.norm.ONPG<-as.vector(scale(Skewness.ONPG))
+Var.norm.ONPG<-as.vector(scale(Variance.ONPG))
 Start.date.norm.ONPG<-as.vector(scale(Start.date.ONPG))
 Duration.norm.ONPG<-as.vector(scale(Duration.ONPG))
 
@@ -2337,7 +2576,11 @@ trait.matrix.s.ONPG<-as.matrix(Skew.norm.ONPG)
 rho.matrix.s.ONPG <- t(trait.matrix.s.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.s.ONPG
 rho.matrix.s.ONPG
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.ONPG<-as.matrix(Var.norm.ONPG) 
+#Rho -- Variance
+rho.matrix.v.ONPG <- t(trait.matrix.v.ONPG) %*% mating.matrix.ONPG %*% trait.matrix.v.ONPG
+rho.matrix.v.ONPG
 
 #Trait matrix -- Start date
 trait.matrix.st.ONPG<-as.matrix(Start.date.norm.ONPG) 
@@ -2370,12 +2613,12 @@ for (i in 1:length(Individual_ID14)) {
   Start<-min(Focal$AbsDay)-1 #Day that flowering was observed to start.
   End<-max(Focal$AbsDay)+1 #Day that flowering was observed to end.
     if (End == 126|End == 125) { #Trouble shooting for when flowering end date was 125 or 126.
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr) #rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr
     AbsDay<-c(0:Start,Focal$AbsDay)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr))) #column with information on which OpFlwr values are added 0s.
   } 
   else {
-    OpFlwr<-c(rep(0,length(0:Start)),Focal$OpFlwr,rep(0,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
+    OpFlwr<-c(rep(NA,length(0:Start)),Focal$OpFlwr,rep(NA,length(End:125)))#rep 0 for OpFlwr until start of flowering, then use observed values of OpFlwr until end of observed flowering, then rep 0
     AbsDay<-c(0:Start,Focal$AbsDay,End:125)
     Added0<-c(rep("yes",length(0:Start)),rep("no",length(Focal$OpFlwr)),rep("yes",length(End:125)))#column with information on which OpFlwr values are added 0s.
   }
@@ -2386,12 +2629,12 @@ for (i in 1:length(Individual_ID14)) {
 }
 
 #PredictDay function for NJPT dataset
-PredictDayNJPT<-function(Num,days=c(0:125),df){
-  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
-  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
-  PredDay[PredDay<0]<-0 #Changing negative values to zero.
-return(PredDay)
-}
+#PredictDayNJPT<-function(Num,days=c(0:125),df){
+#  Mod1<-gam(OpFlwr~s(AbsDay),data=df[df$Individual==Num,]) #Fitting Gam model.
+#  PredDay<-predict(Mod1,newdata=data.frame(AbsDay=c(0:125))) #Predicting data over all days.
+#  PredDay[PredDay<0]<-0 #Changing negative values to zero.
+#return(PredDay)
+#}
 
 
 
@@ -2405,7 +2648,7 @@ colnames(df3)<-c("Flowers","Individual.x","Days","OpFlwr","Individual.y","Added0
 for( j in 1:length(Individual_ID14)){
     count14=count14+1
   FocalFrame<-MasterDataNJPT[MasterDataNJPT$Individual==Individual_ID14[j],]
-  Flowers<-PredictDayNJPT(Num=Individual_ID14[j],df=MasterDataNJPT)#Here use j to subset each individual in the individual ID vector. 
+  Flowers<-PredictDay(Num=Individual_ID14[j],df=MasterDataNJPT)#Here use j to subset each individual in the individual ID vector. 
   Individual<-rep(Individual_ID14[j], times=length(0:125)) #Here to identify the individual, we also need to subset the Individual_ID vector instead. 
   Days<-0:125
   df1<-data.frame(Flowers,Individual,Days)
@@ -2427,7 +2670,9 @@ flr.matrix.NJPT<-as.matrix(Mating.Matrix.Data.NJPT_Wide)
 #Mother/Father matrices
 mother.flr.matrix.NJPT<- flr.matrix.NJPT/sum(flr.matrix.NJPT)
 father.colsum.NJPT<- apply(flr.matrix.NJPT, 2,  sum)
-father.flr.matrix.NJPT<- apply(flr.matrix.NJPT, 1, function(d) d/father.colsum.NJPT) #don't understand this line
+father.flr.matrix.NJPT<- apply(flr.matrix.NJPT, 1, function(d) d/father.colsum.NJPT) 
+father.flr.matrix.NJPT[is.nan(father.flr.matrix.NJPT)]<-0
+father.flr.matrix.NJPT[is.infinite(father.flr.matrix.NJPT)]<-0
 mating.matrix.NJPT <- mother.flr.matrix.NJPT %*% father.flr.matrix.NJPT #Creates mating matrix where each element is the proportion of all matings over all days between mother "i" and father "j" - the "phi" matrix
 sum.mating.matrix.NJPT<- sum(mating.matrix.NJPT) #should be 1
 
@@ -2455,26 +2700,40 @@ Duration.NJPT<-c()
 count14=0
 Mom.NJPT<-for( j in 1:length(Individual_ID14)){
     count14=count14+1
-  Focal.NJPT<-dfset0[dfset0$Individual.x==Individual_ID14[j],]
-  Kurtosis.NJPT<-append(Kurtosis.NJPT,kurtosis(Focal.NJPT$Flowers))
-  Skewness.NJPT<-append(Skewness.NJPT,skewness(Focal.NJPT$Flowers))
-  Variance.NJPT<-append(Variance.NJPT,var(Focal.NJPT$Flowers))}
+  Focal<-df3[df3$Individual.x==Individual_ID14[j],]
+        pDays<-Focal$OpFlwr/sum(Focal$OpFlwr,na.rm=TRUE) #Proportion of total flowers that fall on each day
+  WeightDays<-Focal$Days*pDays #Weight days by the proportion of total flowers open on that day 
+  Mean<-sum(WeightDays,na.rm=TRUE) 
+  Var<-sum((WeightDays-Mean)^2*pDays,na.rm=TRUE)
+  CoeffVar<-Var/(Mean)
+  CoeffKurt<-sum((WeightDays-Mean)^4*pDays,na.rm=TRUE)/sqrt(Var)
+  CoeffSkew<-sum((WeightDays-Mean)^3*pDays,na.rm=TRUE)/sqrt(Var)
+  Kurtosis.NJPT<-append(Kurtosis.NJPT,CoeffKurt)
+  Skewness.NJPT<-append(Skewness.NJPT,CoeffSkew)
+  Variance.NJPT<-append(Variance.NJPT,CoeffVar)
+  Start.date.NJPT<-append(Start.date.NJPT,min(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+  End.date.NJPT<-append(End.date.NJPT,max(Focal$Days[Focal$OpFlwr!=0],na.rm=TRUE))
+} 
+
+Kurtosis.NJPT[is.nan(Kurtosis.NJPT)]<-0
+Skewness.NJPT[is.nan(Skewness.NJPT)]<-0
+Variance.NJPT[is.nan(Variance.NJPT)]<-0
 
 #Find probabilities of moments. 
-KurtosisProb.NJPT<-Kurtosis.NJPT/sum(Kurtosis.NJPT)
-SkewnessProb.NJPT<-Skewness.NJPT/sum(Skewness.NJPT)
-VarianceProb.NJPT<-Variance.NJPT/sum(Variance.NJPT)
+#KurtosisProb.NJPT<-Kurtosis.NJPT/sum(Kurtosis.NJPT)
+#SkewnessProb.NJPT<-Skewness.NJPT/sum(Skewness.NJPT)
+#VarianceProb.NJPT<-Variance.NJPT/sum(Variance.NJPT)
 
 ##Finding average variance.
-mean(VarianceProb.NJPT)
+mean(Variance.NJPT)
 
 ###Find start date
-Start.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide)[apply(Mating.Matrix.Data.NJPT_Wide != 0, 1, which.max)])
-Start.date.NJPT
+#Start.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide)[apply(Mating.Matrix.Data.NJPT_Wide != 0, 1, which.max)])
+#Start.date.NJPT
 
 ###Find end date
-End.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide)[max.col(Mating.Matrix.Data.NJPT_Wide != 0, 'last')])
-End.date.NJPT
+#End.date.NJPT<-as.numeric(names(Mating.Matrix.Data.NJPT_Wide)[max.col(Mating.Matrix.Data.NJPT_Wide != 0, 'last')])
+#End.date.NJPT
 
 ###Find duration
 Duration.NJPT<-End.date.NJPT-Start.date.NJPT
@@ -2482,8 +2741,9 @@ Duration.NJPT<-End.date.NJPT-Start.date.NJPT
 ###Vector of PC1 ####
 
 ##Find z -- vector containing the normalized phenotypic value 
-Kurt.norm.NJPT<-as.vector(scale(KurtosisProb.NJPT))
-Skew.norm.NJPT<-as.vector(scale(SkewnessProb.NJPT))
+Kurt.norm.NJPT<-as.vector(scale(Kurtosis.NJPT))
+Skew.norm.NJPT<-as.vector(scale(Skewness.NJPT))
+Var.norm.NJPT<-as.vector(scale(Variance.NJPT))
 Start.date.norm.NJPT<-as.vector(scale(Start.date.NJPT))
 Duration.norm.NJPT<-as.vector(scale(Duration.NJPT))
 
@@ -2500,7 +2760,11 @@ trait.matrix.s.NJPT<-as.matrix(Skew.norm.NJPT)
 rho.matrix.s.NJPT <- t(trait.matrix.s.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.s.NJPT
 rho.matrix.s.NJPT
 
-## STOPPED CALCULATING VARIANCE BC DECIDED NOT TO USE IN RESULTS. 
+# Trait matrix -- variance.
+trait.matrix.v.NJPT<-as.matrix(Var.norm.NJPT) 
+#Rho -- Variance
+rho.matrix.v.NJPT <- t(trait.matrix.v.NJPT) %*% mating.matrix.NJPT %*% trait.matrix.v.NJPT
+rho.matrix.v.NJPT
 
 #Trait matrix -- Start date
 trait.matrix.st.NJPT<-as.matrix(Start.date.norm.NJPT) 
