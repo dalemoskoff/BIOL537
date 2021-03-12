@@ -729,8 +729,10 @@ ONRO<-subset(Flwr,Flwr$Pop=="ONRO")
 
 #New code
 Individual_ID4<-unique(ONRO$Num)
-# Individual_ID4<-Individual_ID4[Individual_ID4!=235] #tried removing some flowering curves that looked strange to see if that made the rho values more reasonable. It didn't.
-
+Individual_ID4<-Individual_ID4[Individual_ID4!=174]
+Individual_ID4<-Individual_ID4[Individual_ID4!=410]
+Individual_ID4<-Individual_ID4[Individual_ID4!=415]
+#Individual_ID4<-c(373,296,178,75,332,265,138,235,2,23,129,135,163,239,249,279,306,319,336,343,375,412,416,482)
 
 ##Extend AbsDay to be 0:125 with OpFlwr values being 0 on added rows of AbsDay, while retaining information on when OpFlwr values of 0 were added.
 MasterDataONRO<-matrix(nrow=0,ncol=4)
